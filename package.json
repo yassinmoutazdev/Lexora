@@ -1,0 +1,46 @@
+{
+  "name": "lexora",
+  "version": "1.0.0",
+  "private": true,
+  "description": "English-Language Assessment & Diagnostic Pilot — single deployable serving the student assessment, background AI evaluation, and staff dashboard",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "tsc -p tsconfig.build.json",
+    "build:frontend": "vite build --config frontend/vite.config.ts",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bcrypt": "^5.1.1",
+    "cookie-session": "^2.1.1",
+    "csv-stringify": "^6.8.3",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.3",
+    "pino": "^9.14.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^5.4.21",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/cookie-session": "^2.0.49",
+    "@types/express": "^4.17.25",
+    "@types/node": "^26.5.1",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@types/supertest": "^7.2.1",
+    "prisma": "^5.22.0",
+    "supertest": "^7.2.2",
+    "typescript": "^7.0.2",
+    "vitest": "^3.2.7"
+  }
+}

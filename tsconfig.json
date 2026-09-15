@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    "rootDir": "src",
+    "outDir": "dist",
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+
+    // Development runs TypeScript straight through Node's native type-stripping, so relative
+    // imports carry explicit `.ts` extensions. rewriteRelativeImportExtensions makes tsc emit
+    // the matching `.js` specifiers into dist/, so the same source works in both modes.
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+
+    // Type-stripping erases types but cannot elide imports, so type-only imports must be
+    // explicit (`import type { X } from './x.ts'`). This flag enforces that.
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+
+    "sourceMap": true,
+    "declaration": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "frontend"]
+}

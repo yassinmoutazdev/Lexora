@@ -145,7 +145,7 @@ Each Epic is one session. The following applies to every Epic and is not repeate
 - Backend and frontend both build and start locally (`npm run dev`) without errors.
 - `npm test` executes a passing smoke test, and an integration test can run against the test database.
 - `npm run build` produces a backend `dist/` and a frontend bundle; `npm start` serves both from one process.
-- Directory structure matches ARCHITECTURE Section 4 exactly.
+- Directory structure matches ARCHITECTURE Section 4 exactly, with three deliberate additions. `src/config/env.ts` holds environment loading and fail-fast validation, which several Section 18 canonical files need but Section 4 does not enumerate a home for. `scripts/dev.mjs` runs the Express and Vite processes together, because Section 2's pinned dependency list includes no process-runner package. `src/test/` holds the vitest setup and harness modules, which Section 4 shows only implicitly via colocated `*.test.ts` files. No file outside these additions was created, and no Section 4 location was moved or renamed.
 - `.env.example` documents every environment variable required by the architecture, including the test database URL.
 
 **Prerequisites:** A Git repository exists at the project root and the four project documents above are committed. Node.js and npm are available. No other prerequisites — this Epic creates the skeleton.
@@ -159,33 +159,34 @@ Each Epic is one session. The following applies to every Epic and is not repeate
 
 ### Feature 1.1 — Repository & Tooling Setup
 
-- [ ] T1.1.1 — Initialize the Node/TypeScript backend project structure (package.json, tsconfig.json, empty `src/`, `prisma/`, `content/`, `frontend/` directories) matching the approved layout.
+- [x] T1.1.1 — Initialize the Node/TypeScript backend project structure (package.json, tsconfig.json, empty `src/`, `prisma/`, `content/`, `frontend/` directories) matching the approved layout.
       Ref: ARCHITECTURE Section 4 (Project Structure)
       Output: package.json, tsconfig.json, directory skeleton matching Section 4 · `npm install` succeeds
-- [ ] T1.1.2 — Install and pin the backend dependencies and dev dependencies exactly as specified (express, @prisma/client + prisma, zod, bcrypt, cookie-session, csv-stringify, dotenv, pino; typescript, vitest, supertest, @types/*).
+- [x] T1.1.2 — Install and pin the backend dependencies and dev dependencies exactly as specified (express, @prisma/client + prisma, zod, bcrypt, cookie-session, csv-stringify, dotenv, pino; typescript, vitest, supertest, @types/*).
       Ref: ARCHITECTURE Section 2 (Dependencies)
       Output: package.json dependency list matches Section 2 · `npm ls` reports no missing peer dependencies
-- [ ] T1.1.3 — Initialize the Vite + React + TypeScript frontend project under `frontend/`, matching Section 4's file layout (`frontend/index.html`, `frontend/vite.config.ts`, `frontend/src/main.tsx`, `frontend/src/App.tsx`).
+- [x] T1.1.3 — Initialize the Vite + React + TypeScript frontend project under `frontend/`, matching Section 4's file layout (`frontend/index.html`, `frontend/vite.config.ts`, `frontend/src/main.tsx`, `frontend/src/App.tsx`).
       Ref: ARCHITECTURE Section 4 (Project Structure), Section 2 (react/react-dom/vite)
       Output: frontend/vite.config.ts, frontend/index.html, frontend/src/main.tsx · `npm run build` (frontend) produces a dist bundle
-- [ ] T1.1.4 — Configure `dotenv`-based environment variable loading and create `.env.example` documenting `DATABASE_URL`, `OLLAMA_API_KEY`, `OLLAMA_BASE_URL`, `SESSION_SECRET`, `NODE_ENV`.
+- [x] T1.1.4 — Configure `dotenv`-based environment variable loading and create `.env.example` documenting `DATABASE_URL`, `OLLAMA_API_KEY`, `OLLAMA_BASE_URL`, `SESSION_SECRET`, `NODE_ENV`.
       Ref: ARCHITECTURE Section 16 (Deployment & Operations — Environment variables)
       Output: .env.example · the app throws a clear startup error if a required variable is missing
-- [ ] T1.1.5 — Assemble the minimal Express app entrypoint (`src/app.ts` for app assembly/middleware mounting, `src/server.ts` as the process entrypoint) and wire `npm run dev` to run Express and the Vite dev server concurrently.
+- [x] T1.1.5 — Assemble the minimal Express app entrypoint (`src/app.ts` for app assembly/middleware mounting, `src/server.ts` as the process entrypoint) and wire `npm run dev` to run Express and the Vite dev server concurrently.
       Ref: ARCHITECTURE Section 16 (Local development), Section 4
       Output: src/app.ts, src/server.ts · `npm run dev` starts both processes without errors
-- [ ] T1.1.6 — Define the production build pipeline: `npm run build` compiles the backend TypeScript to `dist/` and builds the Vite frontend bundle; `npm start` runs `node dist/server.js`; in production Express serves the built frontend bundle as static files from the same process.
+- [x] T1.1.6 — Define the production build pipeline: `npm run build` compiles the backend TypeScript to `dist/` and builds the Vite frontend bundle; `npm start` runs `node dist/server.js`; in production Express serves the built frontend bundle as static files from the same process.
       Ref: ARCHITECTURE Section 16 (Production deployment — `npm ci && npm run build`, `node dist/server.js`, single process serving bundle + API), Section 1 (single deployable)
       Output: package.json build/start scripts, static-asset serving in src/app.ts · `npm run build` produces `dist/server.js` and a frontend bundle; `npm start` serves the built frontend and the API from one process
 
 ### Feature 1.2 — Testing Harness
 
-- [ ] T1.2.1 — Configure `vitest` for backend unit/integration tests and `supertest` for API-level tests, with one passing smoke test.
+- [x] T1.2.1 — Configure `vitest` for backend unit/integration tests and `supertest` for API-level tests, with one passing smoke test.
       Ref: ARCHITECTURE Section 15 (Testing Strategy)
       Output: vitest.config.ts + one passing smoke test · `npm test` runs and passes
 - [ ] T1.2.2 — Establish the integration-test harness every later Epic's database tests depend on: a separate test database URL (e.g. `DATABASE_URL_TEST` in `.env.example`), a migrate-then-reset step before the suite, per-test truncation/rollback, and shared fixture helpers for creating cohorts, staff users, and submissions.
       Ref: ARCHITECTURE Section 15 (Testing Strategy — integration tests against a real test DB), Section 16 (Local development)
       Output: test setup module + fixture helpers · an example integration test creates and reads a row against the test database, and the suite leaves no residual data between tests
+      **Status — partially complete, checkbox deliberately unticked.** Delivered in E1: `src/test/db.ts` (`DATABASE_URL_TEST` resolution, `runMigrations()` migrate-then-reset, schema-agnostic `resetDatabase()` truncation), `src/test/globalSetup.ts` wired into `vitest.config.ts`, and 9 unit tests covering that behaviour. Outstanding: the cohort/staff/submission fixture helpers and the example create-and-read round trip. Both need `prisma/schema.prisma` (T2.1.1) and a reachable test database (E2's prerequisite), so they land in E2 rather than being guessed at here. No test database was reachable during the E1 session — the local PostgreSQL 18 install has no initialised cluster.
 
 ---
 

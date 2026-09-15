@@ -29,3 +29,6 @@ prisma/*.db-journal
 .idea/
 .DS_Store
 Thumbs.db
+
+# Claude Code per-machine permission cache (committed settings, if any, live in settings.json)
+.claude/settings.local.json
