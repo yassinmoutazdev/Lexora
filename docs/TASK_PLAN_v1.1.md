@@ -279,37 +279,37 @@ Each Epic is one session. The following applies to every Epic and is not repeate
 
 ### Feature 3.1 — Session Infrastructure
 
-- [ ] T3.1.1 — Implement `src/auth/session.ts`: cookie/session configuration for two independent session types — staff session (≈8h) and student session (≈30 min inactivity) — both httpOnly, `Secure`, `SameSite=Lax`.
+- [x] T3.1.1 — Implement `src/auth/session.ts`: cookie/session configuration for two independent session types — staff session (≈8h) and student session (≈30 min inactivity) — both httpOnly, `Secure`, `SameSite=Lax`.
       Ref: ARCHITECTURE Section 9 (Session behavior), Section 13 (Sessions)
       Output: src/auth/session.ts · unit test confirms staff and student sessions are issued with distinct cookie identity/lifetimes and never grant access to each other's routes
-- [ ] T3.1.2 — Implement `src/auth/passwordHasher.ts` (bcrypt wrapper, cost factor 12), and repoint the T2.3.1 seed script at it so password hashing has exactly one implementation.
+- [x] T3.1.2 — Implement `src/auth/passwordHasher.ts` (bcrypt wrapper, cost factor 12), and repoint the T2.3.1 seed script at it so password hashing has exactly one implementation.
       Ref: ARCHITECTURE Section 13 (Password hashing), Section 2 (bcrypt)
       Output: src/auth/passwordHasher.ts · unit test: hash/verify round-trip succeeds, wrong password rejected · prisma/seed.ts uses the wrapper
-- [ ] T3.1.3 — Implement `src/api/middleware/requireStudentSession.ts` and `src/api/middleware/requireStaffSession.ts`, applied per-router rather than globally.
+- [x] T3.1.3 — Implement `src/api/middleware/requireStudentSession.ts` and `src/api/middleware/requireStaffSession.ts`, applied per-router rather than globally.
       Ref: ARCHITECTURE Section 9 (Session behavior — middleware applied per router)
       Output: src/api/middleware/requireStudentSession.ts, requireStaffSession.ts · integration test (using throwaway test-only routers, since the real staff routes arrive in T3.3.2): a staff-only route rejects a student session and vice versa
 
 ### Feature 3.2 — Student Identity Verification
 
-- [ ] T3.2.1 — Implement `src/domain/identity/StudentIdentityService.ts`: normalizes the roll number (trim/lowercase), verifies the cohort code + roll number + name combination against stored records, and finds-or-creates the draft `Submission` row (`status='draft'`, `contentVersion=ContentLoader.getCurrentVersion()`) when no existing submission is found.
+- [x] T3.2.1 — Implement `src/domain/identity/StudentIdentityService.ts`: normalizes the roll number (trim/lowercase), verifies the cohort code + roll number + name combination against stored records, and finds-or-creates the draft `Submission` row (`status='draft'`, `contentVersion=ContentLoader.getCurrentVersion()`) when no existing submission is found.
       Ref: PRD Section 9.1 (FR-STU-001–007), Section 15 (NFR-SEC-001/002/008); ARCHITECTURE Section 1 (Student identity resolution), Section 6, Section 18 (Canonical Locations — `src/domain/identity/StudentIdentityService.ts`). Depends on `SubmissionRepository` (T2.1.4) and `ContentLoader.getCurrentVersion()` (T2.2.4)
       Output: src/domain/identity/StudentIdentityService.ts · unit+integration test: correct match resolves existing/new submission; mismatched roll/name/cohort returns a generic no-match; repeated calls for an existing submission never create a duplicate row
-- [ ] T3.2.2 — Implement `POST /api/session/student-verify`: calls `StudentIdentityService`, issues the student session cookie scoped to the resolved submission id, and returns the current status.
+- [x] T3.2.2 — Implement `POST /api/session/student-verify`: calls `StudentIdentityService`, issues the student session cookie scoped to the resolved submission id, and returns the current status.
       Ref: ARCHITECTURE Section 10 (API contract — student-verify), Section 11 (Error Handling — identity not found), Section 3 (Data Flow)
       Output: src/api/session.routes.ts (student-verify) · integration test: valid identity issues a session with correct status; invalid identity returns a generic error that never reveals which field was wrong
-- [ ] T3.2.3 — Implement `src/api/middleware/validateBody.ts` (zod-based request validation) and apply it to `student-verify`.
+- [x] T3.2.3 — Implement `src/api/middleware/validateBody.ts` (zod-based request validation) and apply it to `student-verify`.
       Ref: ARCHITECTURE Section 10 (validateBody middleware), Section 11 (Validation error)
       Output: src/api/middleware/validateBody.ts · a malformed request body returns 400 before reaching `StudentIdentityService`
 
 ### Feature 3.3 — Staff Authentication
 
-- [ ] T3.3.1 — Implement `src/domain/staff/StaffAuthService.ts`: verifies email/password against `StaffUser` via `passwordHasher`, issues the staff session on success.
+- [x] T3.3.1 — Implement `src/domain/staff/StaffAuthService.ts`: verifies email/password against `StaffUser` via `passwordHasher`, issues the staff session on success.
       Ref: PRD Section 9.7 (FR-STAFF-001/002/003), Section 15 (NFR-SEC-003/004/010); ARCHITECTURE Section 18
       Output: src/domain/staff/StaffAuthService.ts · unit test: correct credentials succeed; wrong password and unknown email are rejected with an identical response (no user-enumeration signal)
-- [ ] T3.3.2 — Implement `POST /api/staff/login` and `POST /api/staff/logout`.
+- [x] T3.3.2 — Implement `POST /api/staff/login` and `POST /api/staff/logout`.
       Ref: ARCHITECTURE Section 10 (API contract — staff login/logout)
       Output: src/api/staff.routes.ts (login/logout) · integration test: login issues the staff session cookie; logout clears it; a protected staff route rejects the request after logout
-- [ ] T3.3.3 — Add per-IP rate limiting to `POST /api/session/student-verify` and `POST /api/staff/login`.
+- [x] T3.3.3 — Add per-IP rate limiting to `POST /api/session/student-verify` and `POST /api/staff/login`.
       Ref: ARCHITECTURE Section 13 (Rate limiting)
       Output: rate limiting applied to both routes · integration test: exceeding the configured threshold blocks further attempts
 

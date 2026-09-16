@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcrypt';
+import { hashPassword } from '../src/auth/passwordHasher.ts';
 import { env } from '../src/config/env.ts';
 
 /**
@@ -13,13 +13,10 @@ import { env } from '../src/config/env.ts';
  * requires staff accounts to be created manually by the team, and ARCHITECTURE Section 16 has
  * production run migrations only — this script is never part of a deploy.
  *
- * Note on password hashing: bcrypt is called directly here. T3.1.2 introduces the shared
- * `src/auth/passwordHasher.ts` wrapper and repoints this script at it, so hashing ends up with
- * exactly one implementation in the codebase.
+ * Note on password hashing: hashing goes through `src/auth/passwordHasher.ts`, the same wrapper
+ * `StaffAuthService` verifies against (T3.1.2). The cost factor is decided there and nowhere else,
+ * so a seeded login can never be hashed to a different standard than the one login checks for.
  */
-
-/** bcrypt cost factor, per ARCHITECTURE Section 13. */
-const BCRYPT_COST = 12;
 
 const DEV_COHORT_CODE = 'PILOT-2026';
 const DEV_STAFF_EMAIL = 'staff@lexora.test';
@@ -45,7 +42,7 @@ async function main(): Promise<void> {
       create: { code: DEV_COHORT_CODE, name: 'Pilot Cohort 2026' },
     });
 
-    const passwordHash = await bcrypt.hash(DEV_STAFF_PASSWORD, BCRYPT_COST);
+    const passwordHash = await hashPassword(DEV_STAFF_PASSWORD);
 
     // The hash is re-derived on every run, so `update` refreshes it to match the currently
     // configured password rather than leaving a stale hash from an earlier seed.

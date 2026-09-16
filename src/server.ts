@@ -1,5 +1,5 @@
 import { createApp } from './app.ts';
-import { ContentLoader } from './content/ContentLoader.ts';
+import { getContentLoader } from './content/ContentLoader.ts';
 import { env } from './config/env.ts';
 
 /**
@@ -23,10 +23,10 @@ function main(): void {
   // explicit connect call to make here.
 
   // Step 2 — every version under content/versions/* is loaded and schema-validated, and the
-  // process refuses to start if any of them is malformed.
-  let contentLoader: ContentLoader;
+  // process refuses to start if any of them is malformed. This resolves the process-wide loader
+  // the domain services use, so what is validated here is exactly what they will read from.
   try {
-    contentLoader = new ContentLoader();
+    getContentLoader();
   } catch (error) {
     console.error(
       `[server] Content validation failed — refusing to start.\n${(error as Error).message}`,
@@ -41,6 +41,7 @@ function main(): void {
 
   app.listen(env.PORT, () => {
     // Structured pino logging replaces the console calls in T9.2.1.
+    const contentLoader = getContentLoader();
     console.log(
       `[server] content versions loaded: ${contentLoader.getLoadedVersions().join(', ')} ` +
         `(current: ${contentLoader.getCurrentVersion()})`,

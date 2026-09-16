@@ -234,3 +234,26 @@ export class ContentLoader {
     return [...this.bundles.keys()];
   }
 }
+
+let instance: ContentLoader | undefined;
+
+/**
+ * The process-wide content loader.
+ *
+ * Content is loaded once and kept, rather than constructed per caller, for the reason the class
+ * documentation gives: a submission's `contentVersion` is frozen at draft creation, so scoring,
+ * reporting, and background evaluation must be able to resolve that version for as long as the
+ * process lives. Re-reading every version per request would be wasteful, and more than one
+ * instance would mean the version a caller resolves depends on which copy it happened to get.
+ *
+ * Lazy rather than a module-level `new ContentLoader()` for the same reason `getPrismaClient()` is
+ * lazy: importing this module to use the *type* must not read the content tree, or a unit test
+ * would depend on the repository's content files existing.
+ *
+ * Tests that need a different content root construct their own `new ContentLoader(fixtureRoot)`
+ * and inject it, so nothing here needs a reset hook.
+ */
+export function getContentLoader(): ContentLoader {
+  instance ??= new ContentLoader();
+  return instance;
+}

@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
 import type { Express } from 'express';
+import { sessionRouter } from './api/session.routes.ts';
+import { staffRouter } from './api/staff.routes.ts';
 import { env, REPO_ROOT } from './config/env.ts';
 
 /** Vite's build output, produced by `npm run build:frontend`. */
@@ -52,6 +54,9 @@ export function createApp(): Express {
   if (env.NODE_ENV === 'production') {
     mountFrontendBundle(app);
   }
+
+  app.use('/api/session', sessionRouter);
+  app.use('/api/staff', staffRouter);
 
   return app;
 }

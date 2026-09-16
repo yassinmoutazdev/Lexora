@@ -68,6 +68,49 @@ export class SubmissionRepository {
       },
     });
   }
+
+  /**
+   * Creates a draft, or returns the row that already exists for the same identity.
+   *
+   * This exists so the caller can be a *find-or-create* without knowing how the "or" is spelled.
+   * `createDraft` alone would be enough for every request that arrives after the first, but two
+   * requests that arrive together — a student double-clicking "Start", or two tabs opened from the
+   * same entry page — both find nothing and both insert. Postgres rejects the second with a unique
+   * violation on `@@unique([cohortId, rollNumberNormalized])`, which is the guarantee; without
+   * this method that rejection would surface as a 500 on a legitimate first visit.
+   *
+   * The unique-violation code is read structurally rather than by importing Prisma's error class,
+   * so this stays a check on the constraint rather than a dependency on a runtime subpath.
+   *
+   * If the violation turns out not to be this constraint, or the row cannot be re-read, the
+   * original error is rethrown — swallowing it would hide a genuine failure behind a retry.
+   */
+  async createDraftIfAbsent(input: CreateDraftInput): Promise<Submission> {
+    try {
+      return await this.createDraft(input);
+    } catch (error) {
+      if (!isUniqueConstraintViolation(error)) throw error;
+
+      const existing = await this.findByCohortAndRollNumber(
+        input.cohortId,
+        input.rollNumberNormalized,
+      );
+
+      if (!existing) throw error;
+
+      return existing;
+    }
+  }
+}
+
+/** Whether an error is Postgres' unique-constraint violation as Prisma reports it. */
+function isUniqueConstraintViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'P2002'
+  );
 }
 
 /** The process-wide repository instance. */
