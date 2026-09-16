@@ -41,8 +41,23 @@ const POLICY: RetryPolicy = { maxAttempts: 3, backoffMs: [5_000, 60_000, 300_000
 const MINUTE = 60_000;
 const STALE = 5 * MINUTE;
 
+/**
+ * The frozen content version every fixture submission is created under, as `completeJob` takes it.
+ *
+ * A literal rather than a read of `getCurrentVersion()`, deliberately: the weight-computation tests
+ * depend on *which* rubric applies, and resolving "current" here would make them pass or fail
+ * according to what `content/current-version.json` happens to say (Section 12).
+ */
+const V1 = { contentVersion: 'v1' };
+
 function service(): JobService {
-  return new JobService({ jobs: processingJobRepository, submissions: submissionRepository });
+  return new JobService({
+    jobs: processingJobRepository,
+    submissions: submissionRepository,
+    // The real content tree, because T7.3.1 makes `completeJob` read the weights from it. A fixture
+    // bundle would let this suite pass while the real rubric was unreadable.
+    content: new ContentLoader(REAL_CONTENT),
+  });
 }
 
 /** Full, correct answers for the real v1 content — the shape `finalize` accepts. */
@@ -136,7 +151,7 @@ describe('JobService.completeJob — a succeeded writing evaluation', () => {
     const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
     const evaluation = defaultWritingEvaluation();
 
-    const outcome = await service().completeJob(job.id, evaluation);
+    const outcome = await service().completeJob(job.id, evaluation, V1);
 
     expect(outcome).toBe('completed');
 
@@ -155,19 +170,64 @@ describe('JobService.completeJob — a succeeded writing evaluation', () => {
     expect(updated.completedAt).toBeInstanceOf(Date);
   });
 
-  it('leaves the overall score for the calculator that does not exist yet', async () => {
-    // The E6 boundary, asserted so E7 cannot forget it and E6 cannot quietly overstep it. The
-    // overall 0-100 is a deterministic function of these criteria and the versioned rubric weights
-    // (FR-WRITE-006); `WritingScoreCalculator` is T7.1.1 and T7.3.1 is what calls it from here. Until
-    // then the column is null — not a number this layer invented.
+  it('computes the overall score from the frozen rubric weights', async () => {
+    // FR-WRITE-006: the overall is a deterministic function of the criterion judgments and the
+    // versioned weights (Section 7). The fake returns 80 for all five criteria, and the v1 rubric
+    // weights are equal, so the expected result is exact under any equal weighting — but it is
+    // *read* from the bundle rather than restated, so this test is about the wiring and not about
+    // the provisional numbers.
     const { submissionId, jobs } = await aFinalizedSubmission();
+    const evaluation = defaultWritingEvaluation();
+    const weights = new ContentLoader(REAL_CONTENT).getContent('v1').writingRubricWeights;
 
     await service().completeJob(
       jobOfType(jobs, JOB_TYPES.writingEvaluation).id,
-      defaultWritingEvaluation(),
+      evaluation,
+      V1,
     );
 
-    expect((await readSubmission(submissionId)).writingOverallScore).toBeNull();
+    const expected = Object.entries(weights).reduce(
+      (sum, [key, weight]) => sum + (evaluation.criteriaScores[key]?.score ?? 0) * (weight / 100),
+      0,
+    );
+
+    expect((await readSubmission(submissionId)).writingOverallScore).toBe(Math.round(expected));
+  });
+
+  it('scores against the version it was given, not whatever is current', async () => {
+    // Section 2, Section 12: a submission is scored against the rubric it was written for. Asserted
+    // by giving `completeJob` a version that does not exist — a "current"-resolving implementation
+    // would quietly succeed here, and this one must not.
+    const { submissionId, jobs } = await aFinalizedSubmission();
+
+    await expect(
+      service().completeJob(
+        jobOfType(jobs, JOB_TYPES.writingEvaluation).id,
+        defaultWritingEvaluation(),
+        { contentVersion: 'does-not-exist' },
+      ),
+    ).rejects.toThrow(/Unknown content version/);
+
+    const stored = await readSubmission(submissionId);
+    expect(stored.writingOverallScore).toBeNull();
+    expect(stored.writingStatus).toBe('pending');
+  });
+
+  it('writes nothing when the evaluation omits a criterion the rubric weights', async () => {
+    // `WritingScoreCalculator` refuses a partial evaluation rather than shrinking the weighted sum
+    // silently. The refusal has to leave the row untouched — a `succeeded` writing status with no
+    // score is a report that can never be completed.
+    const { submissionId, jobs } = await aFinalizedSubmission();
+    const incomplete = defaultWritingEvaluation();
+    delete (incomplete.criteriaScores as Record<string, unknown>).coherence;
+
+    await expect(
+      service().completeJob(jobOfType(jobs, JOB_TYPES.writingEvaluation).id, incomplete, V1),
+    ).rejects.toThrow(/coherence/);
+
+    const stored = await readSubmission(submissionId);
+    expect(stored.writingStatus).toBe('pending');
+    expect(stored.writingOverallScore).toBeNull();
   });
 
   it('does not touch the Student Problems side of the submission', async () => {
@@ -179,6 +239,7 @@ describe('JobService.completeJob — a succeeded writing evaluation', () => {
     await service().completeJob(
       jobOfType(jobs, JOB_TYPES.writingEvaluation).id,
       defaultWritingEvaluation(),
+      V1,
     );
 
     const after = await readSubmission(submissionId);
@@ -194,7 +255,7 @@ describe('JobService.completeJob — a succeeded writing evaluation', () => {
     const { jobs } = await aFinalizedSubmission();
     const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
 
-    await service().completeJob(job.id, defaultWritingEvaluation());
+    await service().completeJob(job.id, defaultWritingEvaluation(), V1);
 
     expect((await readJob(job.id)).attemptCount).toBe(0);
   });
@@ -203,6 +264,7 @@ describe('JobService.completeJob — a succeeded writing evaluation', () => {
     const outcome = await service().completeJob(
       '00000000-0000-0000-0000-000000000000',
       defaultWritingEvaluation(),
+      V1,
     );
 
     expect(outcome).toBe('not_found');
@@ -222,10 +284,13 @@ describe('JobService.completeJob — a succeeded Student Problems analysis', () 
     await service().completeJob(
       jobOfType(jobs, JOB_TYPES.studentProblemsText).id,
       analysis,
+      V1,
     );
 
     const after = await readSubmission(submissionId);
     expect(after.problemsTextStatus).toBe('succeeded');
+    // Exactly the two derived fields and nothing else — a stored analysis that carried a copy of
+    // the original would make `problemsTextDerived` a second, competing record of what was written.
     expect(after.problemsTextDerived).toEqual({
       normalizedText: analysis.normalizedText,
       categories: analysis.categories,
@@ -234,6 +299,10 @@ describe('JobService.completeJob — a succeeded Student Problems analysis', () 
     expect(JSON.stringify(after.problemsOpenTextOriginal)).toBe(
       JSON.stringify(before.problemsOpenTextOriginal),
     );
+    // "Only the derived column" is a claim about every *other* column too, including the Likert
+    // responses sitting beside the open text in the same section (Section 12).
+    expect(after.problemsLikertAnswers).toEqual(before.problemsLikertAnswers);
+    expect(after.answers).toEqual(before.answers);
   });
 
   it('does not touch the writing side of the submission', async () => {
@@ -243,6 +312,7 @@ describe('JobService.completeJob — a succeeded Student Problems analysis', () 
     await service().completeJob(
       jobOfType(jobs, JOB_TYPES.studentProblemsText).id,
       defaultStudentProblemsAnalysis(),
+      V1,
     );
 
     const after = await readSubmission(submissionId);
@@ -260,7 +330,7 @@ describe('JobService.completeJob — a succeeded Student Problems analysis', () 
       data: { submissionId, jobType: 'not_a_job_type' },
     });
 
-    await expect(service().completeJob(rogue.id, defaultWritingEvaluation())).rejects.toThrow(
+    await expect(service().completeJob(rogue.id, defaultWritingEvaluation(), V1)).rejects.toThrow(
       /not_a_job_type/,
     );
 
@@ -296,7 +366,7 @@ describe('JobService.completeJob — transaction boundary #4', () => {
       ...circular,
     };
 
-    await expect(service().completeJob(job.id, unserializable)).rejects.toThrow();
+    await expect(service().completeJob(job.id, unserializable, V1)).rejects.toThrow();
 
     const stored = await readSubmission(submissionId);
     expect(stored.writingStatus).toBe('pending');

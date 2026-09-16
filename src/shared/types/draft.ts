@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { WritingCorrection } from '../../ai/AIEvaluationService.ts';
 import type {
   DeterministicSectionFile,
   ReadingFile,
@@ -196,6 +197,21 @@ export type StudentReport = {
   /** Where the Writing evaluation has got to (FR-FEEDBACK-002/004/007). */
   writingStatus: ProcessingStatus;
   /**
+   * The finished writing evaluation, or null when there is not one to show (FR-WRITE-006/007).
+   *
+   * Non-null exactly when `writingStatus` is `succeeded`, and the pairing is why both are here
+   * rather than one being derivable from the other. `writingStatus` is what the page polls on and
+   * what tells a student "still being prepared" apart from "we could not prepare this"; `writing`
+   * is the feedback itself. A page that switched on the status alone would have to claim a result
+   * the response does not carry.
+   *
+   * Nothing in here is computed by the report. The overall score was computed once by
+   * `WritingScoreCalculator` and stored; the criterion labels come from the rubric in the
+   * submission's frozen `contentVersion`, looked up by key rather than restated, so a criterion can
+   * never be labelled with another version's wording.
+   */
+  writing: ReportWriting | null;
+  /**
    * Where the Student Problems text processing has got to; `not_applicable` when no text was given.
    *
    * Sent because the report describes the submission, not because the student reads it: FR-PROB-007
@@ -203,6 +219,39 @@ export type StudentReport = {
    * dashboard instead (E8).
    */
   problemsTextStatus: ProcessingStatus;
+};
+
+/**
+ * One criterion's judgment, as the report displays it (FR-WRITE-005).
+ *
+ * `label` is the rubric's own wording and `key` is its own key, both read from the submission's
+ * frozen content version. Neither is spelled out in this module, because the five approved criteria
+ * live in `writing-rubric.json` and a second copy here would be a list that can drift from the one
+ * the model is actually asked about.
+ */
+export type ReportWritingCriterion = {
+  key: string;
+  label: string;
+  score: number;
+  rationale: string;
+};
+
+/**
+ * A finished writing evaluation as the report shows it (FR-WRITE-006/007).
+ *
+ * The shape mirrors `writingFeedback`'s four lists, and `corrections` reuses the AI boundary's own
+ * type rather than restating it: the stored feedback was written from those fields, so a second
+ * definition would be a second thing to keep in step with nothing gained.
+ */
+export type ReportWriting = {
+  /** The 0–100 overall, computed by `WritingScoreCalculator` at evaluation time (FR-WRITE-006). */
+  overallScore: number;
+  /** Every rubric criterion, in the rubric's own order. */
+  criteria: ReportWritingCriterion[];
+  strengths: string[];
+  weaknesses: string[];
+  corrections: WritingCorrection[];
+  suggestions: string[];
 };
 
 /**

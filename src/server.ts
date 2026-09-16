@@ -1,11 +1,11 @@
 import type { AIEvaluationService } from './ai/AIEvaluationService.ts';
+import { OllamaProvider } from './ai/OllamaProvider.ts';
 import { createApp } from './app.ts';
 import { DEFAULT_WORKER_SETTINGS, createWorkerLoop } from './background/workerLoop.ts';
 import { getContentLoader } from './content/ContentLoader.ts';
 import { env } from './config/env.ts';
-import { processingJobRepository } from './data/ProcessingJobRepository.ts';
 import { submissionRepository } from './data/SubmissionRepository.ts';
-import { JobService } from './domain/jobs/JobService.ts';
+import { getJobService } from './domain/jobs/JobService.ts';
 
 /**
  * Process entrypoint.
@@ -26,28 +26,47 @@ import { JobService } from './domain/jobs/JobService.ts';
 /**
  * The AI provider this process evaluates with — or null when none is configured.
  *
- * ## What this currently returns, and why that is the whole answer
+ * In every non-test environment this returns an `OllamaProvider`. In test mode it returns null, so
+ * the suite injects `FakeAIEvaluationService` through the worker loop's constructor. That is the
+ * extent of the selection; ARCHITECTURE Section 17's "selected via configuration" is realized by
+ * `env.ts` refusing to load without the two variables, not by a choice made here.
  *
- * **It returns null. There is no production AI provider in this build.** `OllamaProvider` is
- * ARCHITECTURE Section 17's extension point and is not written until E7 (T7.2.1–T7.2.3); T7.2.3 is
- * the task that replaces this function's body with the real selection, reading `OLLAMA_API_KEY` and
- * `OLLAMA_BASE_URL` from the environment (Section 16).
+ * ## Where "a production boot without a provider is fatal" is actually enforced
  *
- * Until then this returns null rather than a stand-in, and deliberately rather than reluctantly.
- * The alternative — booting the loop against a provider that answers every call with an error —
- * would write `failed_needs_review` onto real submissions, which says *"processing failed, a human
- * should look at this"* when the truth is *"processing was never attempted"*. Those two are not the
- * same claim, and only one of them is recoverable by doing nothing. A build with no provider has a
- * truthful state available — the jobs stay `pending`, exactly as `finalize` left them — and this
- * function is what lets the process take it.
+ * In `env.ts`, at import, before this function is reached. `loadEnv` requires `OLLAMA_API_KEY` and
+ * `OLLAMA_BASE_URL` for every `NODE_ENV` other than `test`, and throws a configuration error naming
+ * the missing variable. Measured, not inferred: with `NODE_ENV=production` and a blank key,
+ * `import('./dist/config/env.js')` fails with *"Invalid environment configuration: OLLAMA_API_KEY:
+ * Required"* and `main()` never runs.
  *
- * This is the seam Section 17 describes: *"a second provider implementation could be added and
- * selected via configuration without touching `SubmissionService`, `WritingScoreCalculator`, or any
- * route."* The function is the selection; everything downstream of it takes an
- * `AIEvaluationService`, which is why filling this in is a one-line change to one file.
+ * That placement is the right one, and it is why the guard below is a backstop rather than the
+ * mechanism. A process with no provider cannot evaluate anything: the jobs `finalize` enqueued stay
+ * `pending` forever, because nothing ever claims them in order to fail them, and the student reads
+ * "your writing feedback is still being prepared" — the indefinite in-progress state EDGE-005
+ * forbids. Failing at import means a deployment in that condition never binds a port, which is the
+ * same posture Section 16 takes for malformed content.
+ *
+ * The guard therefore cannot fire today; it is not dead in the sense of being wrong, but it is
+ * unreachable, and it is kept only so that the answer to "what if `env.ts` stopped requiring these"
+ * is a warning and no worker loop rather than a crash inside a constructor. Nothing else should be
+ * hung on it.
  */
 function selectAIEvaluationService(): AIEvaluationService | null {
-  return null;
+  if (env.NODE_ENV === 'test') {
+    return null;
+  }
+
+  if (!env.OLLAMA_API_KEY || !env.OLLAMA_BASE_URL) {
+    // Structured `pino` logging replaces this console call in T9.2.1, alongside the loop's own.
+    console.warn(
+      '[startup] No AI provider configured (OLLAMA_API_KEY/OLLAMA_BASE_URL unset). ' +
+        'Writing and Student Problems jobs will stay pending until one is.',
+    );
+
+    return null;
+  }
+
+  return new OllamaProvider();
 }
 
 /**
@@ -61,10 +80,12 @@ function startWorkerLoop(ai: AIEvaluationService): void {
   // line below describes the settings the loop was actually given.
   const settings = DEFAULT_WORKER_SETTINGS;
 
+  const content = getContentLoader();
+
   const loop = createWorkerLoop({
-    jobs: new JobService({ jobs: processingJobRepository, submissions: submissionRepository }),
+    jobs: getJobService(),
     submissions: submissionRepository,
-    content: getContentLoader(),
+    content,
     ai,
     settings,
     // Structured `pino` logging replaces this console call in T9.2.1. What matters now is that the

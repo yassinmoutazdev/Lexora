@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { ReportQuestion, ReportSection, StudentReport } from '../../../../src/shared/types/draft';
+import type {
+  ReportQuestion,
+  ReportSection,
+  ReportWriting,
+  ReportWritingCriterion,
+  StudentReport,
+} from '../../../../src/shared/types/draft';
 import {
   DETERMINISTIC_SECTION_KEYS,
   type ProcessingStatus,
@@ -164,7 +170,7 @@ export function ReportBody({ report }: { report: StudentReport }) {
         </p>
       </div>
 
-      <WritingPanel status={report.writingStatus} />
+      <WritingPanel status={report.writingStatus} writing={report.writing} />
 
       {DETERMINISTIC_SECTION_KEYS.map((section) => (
         <SectionCard key={section} section={report.deterministic[section]} />
@@ -194,17 +200,34 @@ function formatSubmittedAt(iso: string): string {
 }
 
 /**
- * Where the Writing evaluation has got to (FR-FEEDBACK-002/003/004/007).
+ * The Writing section of the report (FR-FEEDBACK-002/003/004/007, FR-WRITE-006/007).
  *
- * Four states, and each says something different, because collapsing them would either promise
- * feedback that has not arrived or imply failure where there is none. The two waiting states use
- * PRD Section 8.1's own wording — "still being prepared".
+ * ## Why the results are keyed off the feedback and not off the status
  *
- * `succeeded` has no results to show yet: T7.3.3 owns adding the criterion scores and written
- * feedback to this panel once E7 produces them. The status is reported honestly in the meantime
- * rather than the panel claiming a report it cannot render.
+ * Every other state here is a statement about the *status*, but the finished one is a statement
+ * about the *feedback*: "your feedback is ready" is only true if the response actually carries
+ * feedback to render. Keying that heading off `status === 'succeeded'` would let the page announce
+ * results it does not have — the one thing FR-FEEDBACK-008 forbids — so the results branch is
+ * chosen by `writing !== null`, and a `succeeded` status with nothing to show falls through to the
+ * same honest "we could not prepare this" copy as a failure. That combination is not produced by any
+ * code path (the API returns feedback whenever it reports `succeeded`); this is the page refusing to
+ * claim more than it was handed, not a state anyone should expect to see.
+ *
+ * ## The four statuses still need their own words
+ *
+ * A student whose evaluation is still running must not read failure, and one whose evaluation has
+ * given up must not be left on an indefinite "in progress" (FR-FEEDBACK-007). The two waiting states
+ * use PRD Section 8.1's own wording — "still being prepared".
  */
-function WritingPanel({ status }: { status: ProcessingStatus }) {
+function WritingPanel({
+  status,
+  writing,
+}: {
+  status: ProcessingStatus;
+  writing: ReportWriting | null;
+}) {
+  if (writing !== null) return <WritingResults writing={writing} />;
+
   const content: Record<ProcessingStatus, { heading: string; body: string; waiting: boolean }> = {
     not_applicable: {
       heading: 'Writing',
@@ -225,18 +248,8 @@ function WritingPanel({ status }: { status: ProcessingStatus }) {
         'moment. This page updates on its own — you do not need to reload it.',
       waiting: true,
     },
-    succeeded: {
-      heading: 'Your writing feedback is ready',
-      body: 'The evaluation of your written response has finished.',
-      waiting: false,
-    },
-    failed_needs_review: {
-      heading: 'We could not prepare your writing feedback',
-      body:
-        'Your written response has been saved exactly as you wrote it. Your Grammar, Vocabulary, ' +
-        'and Reading results above are unaffected, and a member of staff can review this.',
-      waiting: false,
-    },
+    succeeded: FAILED_WRITING,
+    failed_needs_review: FAILED_WRITING,
   };
 
   const { heading, body, waiting } = content[status];
@@ -249,6 +262,133 @@ function WritingPanel({ status }: { status: ProcessingStatus }) {
         <p className="report-status" role="status" aria-live="polite">
           Checking for your feedback…
         </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What a student is told when there is no feedback to show them (FR-WRITE-011, FR-FEEDBACK-007).
+ *
+ * The first sentence is the one that matters: the response is not lost, and a student who has just
+ * been told to wait does not need to fear that it was. The rest says what *is* still true — the
+ * deterministic results on this same page are unaffected (FR-FEEDBACK-007) — and that a person will
+ * look at it, which is what `failed_needs_review` means.
+ */
+const FAILED_WRITING = {
+  heading: 'We could not prepare your writing feedback',
+  body:
+    'Your written response has been saved exactly as you wrote it. Your Grammar, Vocabulary, ' +
+    'and Reading results above are unaffected, and a member of staff can review this.',
+  waiting: false,
+} as const;
+
+/**
+ * A finished writing evaluation (FR-WRITE-005/006/007).
+ *
+ * ## Why the overall score is shown beside the criteria rather than instead of them
+ *
+ * The overall is a weighted summary of the five criterion scores, so showing it alone would hide the
+ * only thing a student can act on: which aspects of their writing were strong and which were not.
+ * The rubric's weights are deliberately not shown — they are provisional (PRD Section 23.1 item 1)
+ * and a student reading "20%" would reasonably take it as an approved decision.
+ *
+ * ## Why every list is rendered even when it is empty
+ *
+ * The model is asked for four lists and may legitimately return an empty one — a response with no
+ * high-value corrections, say. Rendering a heading with nothing under it reads as a page that failed
+ * to load; skipping the heading entirely would make the report's shape depend on the model's mood,
+ * and a student comparing two reports would have no way to tell an empty list from a missing one.
+ * Saying "None" is the honest third option.
+ */
+function WritingResults({ writing }: { writing: ReportWriting }) {
+  return (
+    <div className="card">
+      <h2>
+        Your writing feedback{' '}
+        <span className="score">
+          {writing.overallScore} / 100
+        </span>
+      </h2>
+
+      <ul className="criterion-list">
+        {writing.criteria.map((criterion) => (
+          <CriterionItem key={criterion.key} criterion={criterion} />
+        ))}
+      </ul>
+
+      <ReportList title="What you did well" items={writing.strengths} />
+      <ReportList title="What to work on" items={writing.weaknesses} />
+      <CorrectionList corrections={writing.corrections} />
+      <ReportList title="Suggestions" items={writing.suggestions} />
+    </div>
+  );
+}
+
+/** One criterion: its rubric label, its score, and the model's evidence for it (FR-WRITE-005). */
+function CriterionItem({ criterion }: { criterion: ReportWritingCriterion }) {
+  return (
+    <li className="criterion">
+      <p className="criterion-head">
+        <span className="criterion-label">{criterion.label}</span>{' '}
+        <span className="score">{criterion.score} / 100</span>
+      </p>
+      <p className="report-explanation">{criterion.rationale}</p>
+    </li>
+  );
+}
+
+/** One of the four titled lists in the feedback (FR-WRITE-007). */
+function ReportList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="feedback-block">
+      <h3>{title}</h3>
+      {items.length === 0 ? (
+        <p className="muted">None.</p>
+      ) : (
+        <ul>
+          {/*
+            Keyed by position, not by text. The model is asked for a list of sentences and may
+            legitimately return the same one twice; two identical strings would collide as keys.
+            The list arrives whole with each report and is never reordered in place, so position
+            is a stable identity here.
+          */}
+          {items.map((item, index) => (
+            <li key={`${index}:${item}`}>{item}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The corrections, shown as what was written beside what it should be (FR-WRITE-007/008).
+ *
+ * The explanation is a third line rather than a third column: it is a sentence, not a value, and
+ * three columns of prose on a phone is a layout nobody reads. Nothing here is a diff — the model
+ * returns whole phrases, not character ranges, so the two texts are shown as the two texts.
+ */
+function CorrectionList({ corrections }: { corrections: ReportWriting['corrections'] }) {
+  return (
+    <div className="feedback-block">
+      <h3>Corrections</h3>
+      {corrections.length === 0 ? (
+        <p className="muted">None.</p>
+      ) : (
+        <ul className="correction-list">
+          {/* Keyed by position for the reason the lists above give: the same phrase can be corrected twice. */}
+          {corrections.map((correction, index) => (
+            <li key={`${index}:${correction.original}`} className="correction">
+              <p className="correction-pair">
+                <span className="correction-original">{correction.original}</span>{' '}
+                <span className="muted">→</span>{' '}
+                <span className="correction-fixed">{correction.corrected}</span>
+              </p>
+              <p className="report-explanation">{correction.explanation}</p>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

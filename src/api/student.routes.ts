@@ -1,5 +1,6 @@
 import express from 'express';
-import type { Submission } from '@prisma/client';
+import type { Prisma, Submission } from '@prisma/client';
+import type { WritingCorrection, WritingCriterionScore } from '../ai/AIEvaluationService.ts';
 import { getStudentSession, studentSessionMiddleware } from '../auth/session.ts';
 import { getContentLoader, type ContentBundle } from '../content/ContentLoader.ts';
 import type { Question } from '../content/contentSchemas.ts';
@@ -16,6 +17,8 @@ import {
   type DraftAutosaveBody,
   type ReportQuestion,
   type ReportSection,
+  type ReportWriting,
+  type ReportWritingCriterion,
   type StudentReport,
 } from '../shared/types/draft.ts';
 import { SECTION_KEYS } from '../shared/types/sections.ts';
@@ -383,8 +386,132 @@ function toStudentReport(submission: Submission): StudentReport {
       ),
     },
     writingStatus: submission.writingStatus,
+    writing: toReportWriting(submission, content),
     problemsTextStatus: submission.problemsTextStatus,
   };
+}
+
+/**
+ * The finished writing evaluation, or null while there is not one to show (FR-WRITE-006/007,
+ * FR-FEEDBACK-004/007).
+ *
+ * ## Why this reads the columns instead of recomputing
+ *
+ * Everything else in `toStudentReport` is recomputed from `answers` and content, because those
+ * numbers are a pure function of both (Section 12). This is the opposite case and deliberately so:
+ * the criterion scores are a *model's judgment* and the overall is the calculator's output — neither
+ * is derivable from anything the report holds. The row is the record, and this reads it.
+ *
+ * ## Why the criteria are ordered and labelled from content
+ *
+ * The stored `writingCriteriaScores` is a keyed object, and a key has no label and no order. Both
+ * come from `writing-rubric.json`'s `criteria` array in the submission's **frozen** version — the
+ * same file the prompt was built from and the weights came from. So a report is always labelled in
+ * the rubric's own words for the rubric the response was actually graded against.
+ *
+ * ## The three columns are read as one fact
+ *
+ * A `succeeded` row carries all three — `recordWritingEvaluation` writes them in a single statement,
+ * and the overall score cannot be computed at all unless every weighted criterion is present
+ * (T7.3.1). A row missing one is therefore not a row any code path in this system produces, and this
+ * returns null rather than rendering a partial evaluation. Null means the page says the feedback
+ * could not be prepared — the same thing it says for `failed_needs_review` — which is the honest
+ * description of a report with nothing in it, and keeps the deterministic results visible rather
+ * than failing the whole response over one inconsistent column (FR-FEEDBACK-007).
+ */
+function toReportWriting(submission: Submission, content: ContentBundle): ReportWriting | null {
+  if (submission.writingStatus !== 'succeeded') return null;
+
+  const overallScore = submission.writingOverallScore;
+  const scores = toCriterionScores(submission.writingCriteriaScores);
+  const feedback = toWritingFeedback(submission.writingFeedback);
+
+  if (overallScore === null || scores === null || feedback === null) return null;
+
+  const criteria = content.writingRubric.criteria.flatMap((criterion): ReportWritingCriterion[] => {
+    const scored = scores[criterion.key];
+
+    // A criterion the rubric names with no stored score is dropped, exactly as `toReportSection`
+    // drops a question with no outcome: there is nothing to show and nothing honest to invent. It
+    // cannot happen for a `succeeded` row, for the reason the doc comment gives.
+    if (!scored) return [];
+
+    return [
+      {
+        key: criterion.key,
+        label: criterion.label,
+        score: scored.score,
+        rationale: scored.rationale,
+      },
+    ];
+  });
+
+  return { overallScore, criteria, ...feedback };
+}
+
+/**
+ * The stored criterion scores, or null when the column is not the shape evaluation writes.
+ *
+ * A narrowing rather than a schema validation, for the reason `toDraftAnswers` gives: this reads
+ * data this system wrote, and re-validating our own writes on the way out would cost a parse per
+ * report for nothing. What it does check is the shape it is about to *index*, so a column that is
+ * not the expected object cannot become a silently empty criteria list.
+ */
+function toCriterionScores(stored: Prisma.JsonValue): Record<string, WritingCriterionScore> | null {
+  if (typeof stored !== 'object' || stored === null || Array.isArray(stored)) return null;
+
+  const scores: Record<string, WritingCriterionScore> = {};
+
+  for (const [key, value] of Object.entries(stored)) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+
+    const { score, rationale } = value as { score?: unknown; rationale?: unknown };
+
+    if (typeof score !== 'number' || typeof rationale !== 'string') return null;
+
+    scores[key] = { score, rationale };
+  }
+
+  return scores;
+}
+
+/**
+ * The four stored feedback lists, or null when the column is not the shape evaluation writes.
+ *
+ * All four are required together: `writingFeedback` is written once, from one evaluation, and a
+ * report showing strengths without weaknesses would be a partial reading of a single judgment.
+ */
+function toWritingFeedback(
+  stored: Prisma.JsonValue,
+): Pick<ReportWriting, 'strengths' | 'weaknesses' | 'corrections' | 'suggestions'> | null {
+  if (typeof stored !== 'object' || stored === null || Array.isArray(stored)) return null;
+
+  const { strengths, weaknesses, corrections, suggestions } = stored as Record<string, unknown>;
+
+  if (!isStringArray(strengths)) return null;
+  if (!isStringArray(weaknesses)) return null;
+  if (!isStringArray(suggestions)) return null;
+  if (!isCorrectionArray(corrections)) return null;
+
+  return { strengths, weaknesses, corrections, suggestions };
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+function isCorrectionArray(value: unknown): value is WritingCorrection[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        typeof (entry as WritingCorrection).original === 'string' &&
+        typeof (entry as WritingCorrection).corrected === 'string' &&
+        typeof (entry as WritingCorrection).explanation === 'string',
+    )
+  );
 }
 
 /**

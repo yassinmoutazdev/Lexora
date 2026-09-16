@@ -215,6 +215,12 @@ export class WorkerLoop {
     const context = await this.deps.submissions.getEvaluationContext(job.submissionId, job.jobType);
     const content = this.deps.content.getContent(context.contentVersion);
 
+    // The frozen version travels with the result, because both writes that follow are derived from
+    // it: the rubric the model was graded against, and the weights its criterion judgments are
+    // scored by. Passing the version rather than a resolved number keeps `contentVersion` the one
+    // statement of which rubric applies (Section 12).
+    const evaluationTarget = { contentVersion: context.contentVersion };
+
     if (context.jobType === JOB_TYPES.writingEvaluation) {
       // The rubric instructions come from the *frozen* version's bundle, passed in rather than
       // resolved by the provider, so the provider has no way to grade against "current" content.
@@ -223,13 +229,17 @@ export class WorkerLoop {
         content.writingRubricInstructions,
       );
 
-      await this.deps.jobs.completeJob(job.id, evaluation);
+      await this.deps.jobs.completeJob(job.id, evaluation, evaluationTarget);
       return;
     }
 
     const analysis = await this.deps.ai.processStudentProblemsText(context.responseText);
 
-    await this.deps.jobs.completeJob(job.id, analysis);
+    // The bundle is resolved above for this branch too, though nothing here reads it: a submission
+    // whose content version has gone missing should fail loudly rather than be processed against
+    // nothing. The version still travels with the result for the same reason — one code path, one
+    // statement of what the job was evaluated under.
+    await this.deps.jobs.completeJob(job.id, analysis, evaluationTarget);
   }
 
   /**

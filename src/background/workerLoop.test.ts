@@ -64,10 +64,16 @@ function delay(ms: number): Promise<void> {
  * loop says out loud, so a test that expects a failure to be swallowed still has to see it reported.
  */
 function startLoop(ai: FakeAIEvaluationService, failures: unknown[] = []) {
+  const content = new ContentLoader(REAL_CONTENT);
+
   const loop = createWorkerLoop({
-    jobs: new JobService({ jobs: processingJobRepository, submissions: submissionRepository }),
+    jobs: new JobService({
+      jobs: processingJobRepository,
+      submissions: submissionRepository,
+      content,
+    }),
     submissions: submissionRepository,
-    content: new ContentLoader(REAL_CONTENT),
+    content,
     ai,
     settings: TEST_SETTINGS,
     onError: (error) => failures.push(error),
@@ -81,10 +87,16 @@ function startLoop(ai: FakeAIEvaluationService, failures: unknown[] = []) {
 
 /** A loop that is built but not started, for the tests that drive `tick()` themselves. */
 function manualLoop(ai: FakeAIEvaluationService, failures: unknown[] = []) {
+  const content = new ContentLoader(REAL_CONTENT);
+
   const loop = createWorkerLoop({
-    jobs: new JobService({ jobs: processingJobRepository, submissions: submissionRepository }),
+    jobs: new JobService({
+      jobs: processingJobRepository,
+      submissions: submissionRepository,
+      content,
+    }),
     submissions: submissionRepository,
-    content: new ContentLoader(REAL_CONTENT),
+    content,
     ai,
     settings: TEST_SETTINGS,
     onError: (error) => failures.push(error),
@@ -125,8 +137,14 @@ function answersFrom(): DraftAnswers {
   };
 }
 
-/** A submitted assessment with the two pending jobs `finalize` enqueues — real work to claim. */
-async function aFinalizedSubmission() {
+/**
+ * A submitted assessment with the two pending jobs `finalize` enqueues — real work to claim.
+ *
+ * `only` keeps a single job type, for the tests that are about what happens to *one* job over
+ * several ticks. Without it, a loop driven repeatedly would spend its claims on whichever job the
+ * queue returned first, and the count of ticks would stop matching the count of attempts.
+ */
+async function aFinalizedSubmission(options: { only?: string } = {}) {
   const cohort = await createCohort();
   const submission = await createSubmission(cohort.id, {
     contentVersion: 'v1',
@@ -137,6 +155,12 @@ async function aFinalizedSubmission() {
     submissions: submissionRepository,
     content: new ContentLoader(REAL_CONTENT),
   }).finalize(submission.id);
+
+  if (options.only) {
+    await prisma().processingJob.deleteMany({
+      where: { submissionId: submission.id, jobType: { not: options.only } },
+    });
+  }
 
   return submission.id;
 }
@@ -249,8 +273,12 @@ describe('WorkerLoop — the interval', () => {
     const stored = await readSubmission(submissionId);
     expect(stored.writingCriteriaScores).not.toBeNull();
     expect(stored.problemsTextDerived).not.toBeNull();
-    // FR-WRITE-006 / the E6 boundary: the loop persists the criterion judgments and stops there.
-    expect(stored.writingOverallScore).toBeNull();
+    // FR-WRITE-006: the overall score is persisted too, derived by `WritingScoreCalculator` from
+    // the criterion judgments above and the weights in the submission's frozen version. The fake
+    // answers 80 on all five criteria and v1's weights are equal, so 80 is the expected score under
+    // this rubric — asserted as a number rather than as "not null" because a wrong weight read would
+    // still produce a number.
+    expect(stored.writingOverallScore).toBe(80);
     // FR-PROB-009: the AI's write went to the derived column only.
     expect(stored.problemsOpenTextOriginal).toBe(answersFrom().studentProblems?.openText);
 
@@ -341,6 +369,90 @@ describe('WorkerLoop — failures', () => {
     expect(stored.writingStatus).toBe('failed_needs_review');
     expect(JSON.stringify(stored.answers)).toBe(JSON.stringify(before.answers));
     expect(failures).toHaveLength(1);
+  });
+
+  it('exhausts the writing evaluation budget, preserving the response and the rest of the report', async () => {
+    // T7.3.2 / FR-WRITE-011 / EDGE-004, end to end through the loop rather than through `failJob`
+    // alone. The provider always fails *retryably*, so the only thing that can end the job is the
+    // attempt budget — which is what makes this a test of the whole retry path and not of one
+    // transition.
+    const submissionId = await aFinalizedSubmission({ only: JOB_TYPES.writingEvaluation });
+    const before = await readSubmission(submissionId);
+    const ai = new FakeAIEvaluationService({
+      writing: { kind: 'failure', error: new AIRetryableError('provider is down') },
+    });
+    const failures: unknown[] = [];
+    const loop = manualLoop(ai, failures);
+
+    for (let attempt = 0; attempt < TEST_SETTINGS.maxAttempts; attempt += 1) {
+      await loop.tick();
+      // Move the due time into the past rather than waiting out the backoff — the same substitution
+      // the `JobService` suite makes, and the reason the schedule is a parameter.
+      await prisma().processingJob.updateMany({
+        where: { submissionId },
+        data: { nextAttemptAt: new Date(Date.now() - 1_000) },
+      });
+    }
+
+    const job = (await readJobs(submissionId))[0];
+    expect(job?.status).toBe('failed_needs_review');
+    expect(job?.attemptCount).toBe(TEST_SETTINGS.maxAttempts);
+
+    const stored = await readSubmission(submissionId);
+    expect(stored.writingStatus).toBe('failed_needs_review');
+    // The student's own words, byte-for-byte. Compared against the row as it stood before the first
+    // attempt, not against the fixture, so this also covers finalize's write.
+    expect(JSON.stringify((stored.answers as DraftAnswers).writing?.essayText)).toBe(
+      JSON.stringify((before.answers as DraftAnswers).writing?.essayText),
+    );
+    expect(JSON.stringify(stored.answers)).toBe(JSON.stringify(before.answers));
+    // FR-FEEDBACK-007: the deterministic results are unaffected and still visible.
+    expect(stored.grammarScore).toBe(before.grammarScore);
+    expect(stored.vocabularyScore).toBe(before.vocabularyScore);
+    expect(stored.readingScore).toBe(before.readingScore);
+    expect(failures).toHaveLength(TEST_SETTINGS.maxAttempts);
+  });
+
+  it('exhausts the Student Problems budget, preserving the original and the rest of the report', async () => {
+    // T7.4.2 / FR-PROB-013 / EDGE-008, the same path for the other job type. Worth its own test
+    // because the original here lives in a *column* the AI writes beside, so "preserved" is a claim
+    // about a write that did not name it rather than about a JSON document nothing touched.
+    const submissionId = await aFinalizedSubmission({ only: JOB_TYPES.studentProblemsText });
+    const before = await readSubmission(submissionId);
+    const ai = new FakeAIEvaluationService({
+      problems: { kind: 'failure', error: new AIRetryableError('provider is down') },
+    });
+    const failures: unknown[] = [];
+    const loop = manualLoop(ai, failures);
+
+    for (let attempt = 0; attempt < TEST_SETTINGS.maxAttempts; attempt += 1) {
+      await loop.tick();
+      await prisma().processingJob.updateMany({
+        where: { submissionId },
+        data: { nextAttemptAt: new Date(Date.now() - 1_000) },
+      });
+    }
+
+    const job = (await readJobs(submissionId))[0];
+    expect(job?.status).toBe('failed_needs_review');
+    expect(job?.attemptCount).toBe(TEST_SETTINGS.maxAttempts);
+
+    const stored = await readSubmission(submissionId);
+    expect(stored.problemsTextStatus).toBe('failed_needs_review');
+    // Nothing was derived, because nothing succeeded — a half-written analysis would be worse than
+    // none, and the column is the AI's only destination.
+    expect(stored.problemsTextDerived).toBeNull();
+    expect(stored.problemsOpenTextOriginal).toBe(before.problemsOpenTextOriginal);
+    expect(JSON.stringify(stored.problemsOpenTextOriginal)).toBe(
+      JSON.stringify(before.problemsOpenTextOriginal),
+    );
+    // FR-PROB-013: "the rest of the report is unaffected" — the deterministic results and the
+    // writing side (which has its own job type and its own status) are exactly as they were.
+    expect(stored.grammarScore).toBe(before.grammarScore);
+    expect(stored.vocabularyScore).toBe(before.vocabularyScore);
+    expect(stored.readingScore).toBe(before.readingScore);
+    expect(stored.writingStatus).toBe(before.writingStatus);
+    expect(failures).toHaveLength(TEST_SETTINGS.maxAttempts);
   });
 
   it('fails the job rather than the process when the frozen content version is gone', async () => {

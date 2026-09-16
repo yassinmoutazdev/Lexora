@@ -1,12 +1,14 @@
 import type { ProcessingJob } from '@prisma/client';
 import type { StudentProblemsAnalysis, WritingEvaluation } from '../../ai/AIEvaluationService.ts';
 import { AIError, AIValidationError } from '../../ai/errors.ts';
+import { getContentLoader, type ContentLoader } from '../../content/ContentLoader.ts';
 import { processingJobRepository, type ProcessingJobRepository } from '../../data/ProcessingJobRepository.ts';
 import {
   submissionRepository,
   type SubmissionRepository,
   type SubmissionTx,
 } from '../../data/SubmissionRepository.ts';
+import { computeOverallScore } from '../scoring/WritingScoreCalculator.ts';
 import { JOB_TYPES, isJobType } from './jobTypes.ts';
 
 /**
@@ -19,11 +21,12 @@ import { JOB_TYPES, isJobType } from './jobTypes.ts';
  * point."* So the three methods below are the whole of it, and the worker loop (T6.3.1) is the only
  * thing that calls them.
  *
- * Nothing in this file talks to an AI provider, and nothing in it knows what a rubric is. It is
- * handed a result that has already been schema-validated at the boundary and stores it. That is
- * deliberate and load-bearing for E7: the one thing this file must *not* do yet is compute a writing
- * score, because the weighting formula lives in the versioned rubric and belongs to
- * `WritingScoreCalculator` (T7.1.1, extended into `completeJob` by T7.3.1).
+ * Nothing in this file talks to an AI provider, and it does not know what a rubric says. It is
+ * handed a result that has already been schema-validated at the boundary and stores it. The one
+ * number it *derives* rather than receives — the 0–100 writing overall — it does not compute either:
+ * it hands the criterion judgments and the frozen version's weights to `WritingScoreCalculator` and
+ * stores what comes back (T7.3.1). The weighting formula has exactly one implementation, and this is
+ * not it.
  */
 
 /**
@@ -93,6 +96,31 @@ const MAX_LAST_ERROR_LENGTH = 500;
 export type JobServiceDeps = {
   jobs: ProcessingJobRepository;
   submissions: SubmissionRepository;
+  /**
+   * Where the rubric weights come from — never compiled in (Section 2, Section 7).
+   *
+   * A dependency rather than a parameter because `completeJob` resolves the bundle *itself* from the
+   * `contentVersion` it is given, so the weights a writing result is scored against are always read
+   * from the version that evaluation was made under. A caller could pass a version, but it cannot
+   * pass a weight: there is no argument through which a number could arrive that no content file
+   * contains.
+   */
+  content: ContentLoader;
+};
+
+/**
+ * What `completeJob` needs from the caller beyond the result itself.
+ *
+ * Exactly one field, and it is not about the result — it is about *where the result goes*. The
+ * submission's frozen `contentVersion`, resolved from the `Submission` row by
+ * `getEvaluationContext` and never from the job (Section 8, Section 12). Required rather than
+ * optional so a writing job cannot be completed without a rubric to score it against; a caller that
+ * omitted it would otherwise write a `succeeded` writing result with a null overall score, which is
+ * the one state `writingStatus` alone cannot distinguish from a complete one.
+ */
+export type CompleteJobOptions = {
+  /** The version frozen at draft creation. Resolved by this class, never "current". */
+  contentVersion: string;
 };
 
 export class JobService {
@@ -139,10 +167,21 @@ export class JobService {
    * evaluation to run, so the two agree by construction — the same single-justification cast
    * `toDraftAnswers` makes about `answers`. It is narrowed here rather than taken as an argument so
    * that the row stays the one statement of what a job is.
+   *
+   * ## Where the writing overall score comes from
+   *
+   * Not from the provider (which returns criterion judgments and is forbidden a score), and not from
+   * this file, which has no formula. The criteria and the frozen version's `writingRubricWeights` go
+   * to `WritingScoreCalculator` (Section 7), and its answer is stored alongside them. If the
+   * calculator refuses — a weighted criterion the evaluation omitted — the throw propagates out of
+   * the transaction, nothing is written, and the job fails into the retry path. That is the intended
+   * outcome: a missing criterion would otherwise shrink the weighted sum silently and produce a
+   * plausible, wrong, permanently-stored number.
    */
   async completeJob(
     jobId: string,
     result: WritingEvaluation | StudentProblemsAnalysis,
+    options: CompleteJobOptions,
   ): Promise<CompleteJobOutcome> {
     return this.deps.submissions.transaction(async (tx) => {
       const job = await this.deps.jobs.findById(tx, jobId);
@@ -164,14 +203,19 @@ export class JobService {
       if (job.jobType === JOB_TYPES.writingEvaluation) {
         const evaluation = result as WritingEvaluation;
 
-        // `writingOverallScore` is not written here, and its absence is the E6 boundary. The overall
-        // score is a deterministic function of these criteria and the versioned rubric weights
-        // (FR-WRITE-006, Section 7) and it is `WritingScoreCalculator`'s to compute — T7.1.1 builds
-        // it, T7.3.1 calls it from this branch. Until then the column stays null rather than holding
-        // a number this file made up, which is also why `writingStatus` alone is not enough to say
-        // the report is complete.
+        // The weights come from the submission's *frozen* version, resolved through the same loader
+        // every other content read uses, so a submission is scored against the rubric it was written
+        // for even after a newer version becomes current (Section 2, Section 12). `getContent` throws
+        // for a version it does not hold, which is the loud failure that guarantees this.
+        const content = this.deps.content.getContent(options.contentVersion);
+        const { overallScore } = computeOverallScore(
+          evaluation.criteriaScores,
+          content.writingRubricWeights,
+        );
+
         await this.deps.submissions.recordWritingEvaluation(tx, job.submissionId, {
           criteriaScores: evaluation.criteriaScores,
+          overallScore,
           feedback: {
             strengths: evaluation.strengths,
             weaknesses: evaluation.weaknesses,
@@ -335,6 +379,7 @@ export function getJobService(): JobService {
   instance ??= new JobService({
     jobs: processingJobRepository,
     submissions: submissionRepository,
+    content: getContentLoader(),
   });
 
   return instance;

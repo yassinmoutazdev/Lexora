@@ -512,45 +512,51 @@ Each Epic is one session. The following applies to every Epic and is not repeate
 
 ### Feature 7.1 — Writing Score Calculation
 
-- [ ] T7.1.1 — Implement `src/domain/scoring/WritingScoreCalculator.ts`: a pure function computing the 0–100 overall score via the fixed weighted-sum formula from the five criterion scores plus `writingRubricWeights` read from the versioned content bundle (never hardcoded).
+- [x] T7.1.1 — Implement `src/domain/scoring/WritingScoreCalculator.ts`: a pure function computing the 0–100 overall score via the fixed weighted-sum formula from the five criterion scores plus `writingRubricWeights` read from the versioned content bundle (never hardcoded).
       Ref: PRD Section 9.4 (FR-WRITE-006/009); ARCHITECTURE Section 7 (WritingScoreCalculator), Section 18
       Output: src/domain/scoring/WritingScoreCalculator.ts + test · unit tests assert formula correctness against fixture weights, including boundary values (0, 100)
 
 ### Feature 7.2 — Ollama Provider Integration
 
-- [ ] T7.2.1 — Implement `src/ai/OllamaProvider.ts`: the only file that knows about Ollama; builds the fixed rubric prompt from `content.writingRubricInstructions`, requests structured JSON, enforces a request timeout (e.g. 60s), and reads `OLLAMA_API_KEY`/`OLLAMA_BASE_URL` from environment variables only.
+- [x] T7.2.1 — Implement `src/ai/OllamaProvider.ts`: the only file that knows about Ollama; builds the fixed rubric prompt from `content.writingRubricInstructions`, requests structured JSON, enforces a request timeout (e.g. 60s), and reads `OLLAMA_API_KEY`/`OLLAMA_BASE_URL` from environment variables only.
       Ref: PRD Section 9.4 (FR-WRITE-003/004); ARCHITECTURE Section 1 (AI-assisted scoring), Section 8, Section 13 (API key protection), Section 14 (Timeouts), Section 18
       Output: src/ai/OllamaProvider.ts · test (against a stubbed HTTP layer, never real Ollama) confirms request shape, timeout enforcement, and that no route/log line ever includes the API key
-- [ ] T7.2.2 — Implement `evaluateWriting()` and `processStudentProblemsText()` on `OllamaProvider`, validating responses against `src/ai/schemas.ts` before returning.
+- [x] T7.2.2 — Implement `evaluateWriting()` and `processStudentProblemsText()` on `OllamaProvider`, validating responses against `src/ai/schemas.ts` before returning.
       Ref: PRD Section 9.4 (FR-WRITE-005/007/008), Section 9.5 (FR-PROB-010/011); ARCHITECTURE Section 3 (Data Flow — Background Writing Evaluation)
       Output: src/ai/OllamaProvider.ts (evaluateWriting, processStudentProblemsText) · unit test with mocked HTTP responses: malformed JSON throws `AIValidationError`, network/timeout throws `AIRetryableError`
-- [ ] T7.2.3 — Wire `OllamaProvider` as the production `AIEvaluationService` implementation selected via configuration, with `FakeAIEvaluationService` used in all automated tests.
+- [x] T7.2.3 — Wire `OllamaProvider` as the production `AIEvaluationService` implementation selected via configuration, with `FakeAIEvaluationService` used in all automated tests.
       Ref: ARCHITECTURE Section 17 (Alternative/additional AI providers — seam), Section 15 (Mocking Ollama)
       Output: dependency wiring in server/app assembly · the automated test suite never calls real Ollama; production boot uses `OllamaProvider`
 
 ### Feature 7.3 — Writing Evaluation Flow Integration
 
-- [ ] T7.3.1 — Extend `JobService.completeJob()` so a succeeded `writing_eval` job calls `WritingScoreCalculator.computeOverallScore()` before persisting, writing `writingCriteriaScores`, `writingOverallScore`, `writingFeedback`, and `writingStatus='succeeded'` transactionally.
+- [x] T7.3.1 — Extend `JobService.completeJob()` so a succeeded `writing_eval` job calls `WritingScoreCalculator.computeOverallScore()` before persisting, writing `writingCriteriaScores`, `writingOverallScore`, `writingFeedback`, and `writingStatus='succeeded'` transactionally.
       Ref: PRD Section 9.4 (FR-WRITE-006/007); ARCHITECTURE Section 3, Section 6 (Transaction boundaries #4), Section 18
       Output: src/domain/jobs/JobService.ts (completeJob writing_eval branch) · integration test: full pending→claimed→succeeded flow (with `FakeAIEvaluationService`) produces the correct `writingOverallScore`
-- [ ] T7.3.2 — Verify writing-evaluation failure handling end-to-end: original response text preserved, retries exhausted, `writingStatus='failed_needs_review'`.
+      **The weights are resolved inside `completeJob`, from the version it is given.** `CompleteJobOptions.contentVersion` (required, from `getEvaluationContext`) is resolved through the `ContentLoader` the service now takes, so the weights a result is scored against are always the frozen version's. Three tests pin it: the score is the weighted sum read from the bundle; a version that does not exist throws (`/Unknown content version/`) and writes nothing; an evaluation missing a weighted criterion throws and leaves the row at `pending` rather than storing a plausible short total.
+- [x] T7.3.2 — Verify writing-evaluation failure handling end-to-end: original response text preserved, retries exhausted, `writingStatus='failed_needs_review'`.
       Ref: PRD Section 9.4 (FR-WRITE-011), Section 19 (EDGE-004); ARCHITECTURE Section 8 (Retries and backoff)
       Output: integration test using a `FakeAIEvaluationService` configured to always fail · after `MAX_ATTEMPTS`, `writingStatus='failed_needs_review'` and `answers.writing.essayText` is unchanged
-- [ ] T7.3.3 — Update `GET /api/student/report` and `ReportPage.tsx` to surface writing results once `writingStatus='succeeded'` (criterion scores, overall score, strengths/weaknesses/corrections/suggestions) or the "processing failed / needs review" status.
+      **Driven through the loop, not through `failJob`.** The provider fails *retryably*, so only the attempt budget can end the job — three ticks with `nextAttemptAt` rewound between them. The essay is compared byte-for-byte against the row as it stood before the first attempt, and the three deterministic scores are asserted unchanged (FR-FEEDBACK-007).
+- [x] T7.3.3 — Update `GET /api/student/report` and `ReportPage.tsx` to surface writing results once `writingStatus='succeeded'` (criterion scores, overall score, strengths/weaknesses/corrections/suggestions) or the "processing failed / needs review" status.
       Ref: PRD Section 9.4 (FR-WRITE-007), Section 9.6 (FR-FEEDBACK-003/007), Section 13 (Feedback and Result States table)
       Output: src/api/student.routes.ts (GET report — writing fields), frontend ReportPage.tsx · integration/manual verification: all four states in Section 13's table render correctly
+      **`writing` is a field separate from `writingStatus`**, because "your feedback is ready" is only true if the response carries feedback — the page branches on `writing !== null`, not on `succeeded`, so it can never announce results it was not handed. Criteria are ordered and labelled from `writingRubric.criteria` in the submission's frozen version, never restated in code; the rubric's instructions and weights are asserted absent from the response. Verified live against the built production server with a local stub standing in for Ollama (no external call, no quota): draft → pending → succeeded with the full block → `failed_needs_review` with the essay byte-identical. The frontend is rendered from that response but was **not** checked in a browser — Section 15 makes frontend coverage manual, and none was available in this session.
 
 ### Feature 7.4 — Student Problems AI Processing
 
-- [ ] T7.4.1 — Extend `JobService`/`completeJob` so a succeeded `student_problems_text` job writes only to `problemsTextDerived` (normalizedText, categories), never touching `problemsOpenTextOriginal`, and sets `problemsTextStatus='succeeded'`.
+- [x] T7.4.1 — Extend `JobService`/`completeJob` so a succeeded `student_problems_text` job writes only to `problemsTextDerived` (normalizedText, categories), never touching `problemsOpenTextOriginal`, and sets `problemsTextStatus='succeeded'`.
       Ref: PRD Section 9.5 (FR-PROB-009/010/011); ARCHITECTURE Section 6 (problemsOpenTextOriginal vs. problemsTextDerived), Section 12 (Original data preservation)
       Output: src/domain/jobs/JobService.ts (completeJob student_problems_text branch) · integration test: derived data is written; the original column is provably unchanged before and after
-- [ ] T7.4.2 — Verify Student Problems processing failure handling: original open-text response preserved, `problemsTextStatus='failed_needs_review'` after retries exhausted, rest of the report unaffected.
+      **The write already existed from E6** — this task was verification, and the test was strengthened to cover the whole of "only the derived column": the stored value is asserted to be exactly `{normalizedText, categories}`, and `problemsLikertAnswers` and `answers` are now asserted unchanged alongside the original open text.
+- [x] T7.4.2 — Verify Student Problems processing failure handling: original open-text response preserved, `problemsTextStatus='failed_needs_review'` after retries exhausted, rest of the report unaffected.
       Ref: PRD Section 9.5 (FR-PROB-013), Section 19 (EDGE-008)
       Output: integration test using a failing `FakeAIEvaluationService` · original text preserved, rest of the report unaffected
-- [ ] T7.4.3 — Confirm Student Problems Likert responses and derived data never influence any English proficiency score (no code path in `DeterministicScoringService` or `WritingScoreCalculator` reads `problemsLikertAnswers`/`problemsTextDerived`).
+      **Same loop-driven shape as T7.3.2.** `problemsTextDerived` is additionally asserted `null` — a half-written analysis would be worse than none — and the three deterministic scores plus `writingStatus` are unchanged, which is "the rest of the report is unaffected" read literally.
+- [x] T7.4.3 — Confirm Student Problems Likert responses and derived data never influence any English proficiency score (no code path in `DeterministicScoringService` or `WritingScoreCalculator` reads `problemsLikertAnswers`/`problemsTextDerived`).
       Ref: PRD Section 9.5 (FR-PROB-008/012)
       Output: code review checkpoint + unit test asserting the scoring services accept no Student Problems input · test fails if such a dependency is ever introduced
+      **Tested by varying the data, not by reading the signature** — a signature check would pass for an implementation that read `answers.studentProblems` directly, which is the mistake actually available. `DeterministicScoringService`: opposite ends of the Likert scale, the section absent entirely, and open text that *is* a correct answer key all produce byte-identical results. `WritingScoreCalculator`: no Student Problems parameter exists, so the guard is structural (arity) plus a no-ambient-state test, with the guard's limits stated in the comment rather than overclaimed. One integration test closes the loop at the system level: two submissions differing only in Student Problems produce identical Grammar, Vocabulary, Reading, and writing-overall scores through `GET /api/student/report`.
 
 ---
 

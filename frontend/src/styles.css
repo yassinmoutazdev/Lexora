@@ -489,3 +489,84 @@ button.secondary:hover:not(:disabled) {
   color: var(--ink-faint);
   min-height: 1.4em;
 }
+
+/* ---------------------------------------------------------------- writing feedback */
+
+.criterion-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+}
+
+.criterion {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 1rem;
+  margin-top: 1rem;
+}
+
+.criterion:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.criterion-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin: 0;
+}
+
+.criterion-label {
+  font-weight: 500;
+}
+
+/*
+ * The four feedback lists and the corrections share this block. `margin-top` rather than a border:
+ * they are sections of one evaluation, and a rule between each would read as five separate results.
+ */
+.feedback-block {
+  margin-top: 1.5rem;
+}
+
+.feedback-block h3 {
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+}
+
+.feedback-block ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.correction-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.correction {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.correction:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.correction-pair {
+  margin: 0;
+}
+
+/* The two texts are the pair; the arrow between them is punctuation, and is left muted. */
+.correction-original {
+  text-decoration: line-through;
+  color: var(--ink-soft);
+}
+
+.correction-fixed {
+  font-weight: 500;
+}

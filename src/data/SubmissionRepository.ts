@@ -245,11 +245,11 @@ export class SubmissionRepository {
   /**
    * Writes a succeeded writing evaluation onto the submission (Section 3, Section 6 boundary #4).
    *
-   * `writingOverallScore` is deliberately absent. FR-WRITE-006 and Section 7 reserve that number for
-   * `WritingScoreCalculator`, computed from these criterion scores and the versioned rubric weights,
-   * and E6 has no calculator yet (T7.1.1/T7.3.1) — so the honest thing to leave behind is nothing,
-   * rather than a number this layer invented. The column stays null, and `writingStatus` says why
-   * the report has no writing result to show.
+   * `overallScore` is *passed in* rather than computed here. FR-WRITE-006 and Section 7 reserve that
+   * number for `WritingScoreCalculator`, which computes it from these criterion scores and the
+   * versioned rubric weights; this layer stores what it is handed, exactly as it does for the
+   * criterion judgments themselves. The three columns move together or not at all — a row whose
+   * `writingStatus` is `succeeded` always carries both the criteria and the score derived from them.
    *
    * Called only inside the transaction that also marks the job succeeded, which is the whole point of
    * boundary #4: the result and the record of having produced it are one fact.
@@ -263,6 +263,7 @@ export class SubmissionRepository {
       where: { id: submissionId },
       data: {
         writingCriteriaScores: write.criteriaScores,
+        writingOverallScore: write.overallScore,
         writingFeedback: write.feedback,
         writingStatus: 'succeeded',
       },
@@ -441,6 +442,11 @@ type DraftAnswersLike = {
 export type WritingEvaluationWrite = {
   /** Criterion key → `{ score, rationale }` (Section 6's `writingCriteriaScores`). */
   criteriaScores: Prisma.InputJsonValue;
+  /**
+   * The 0–100 overall, already computed by `WritingScoreCalculator` (Section 6's
+   * `writingOverallScore`, an `Int?` — which is why the calculator rounds).
+   */
+  overallScore: number;
   /** Strengths, weaknesses, corrections, and suggestions (Section 6's `writingFeedback`). */
   feedback: Prisma.InputJsonValue;
 };

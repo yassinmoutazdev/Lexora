@@ -355,3 +355,85 @@ describe('scoreDeterministicSections — the content it is given decides the sco
     );
   });
 });
+
+describe('scoreDeterministicSections — Student Problems never reaches an English score', () => {
+  /**
+   * FR-PROB-008 and FR-PROB-012 (T7.4.3): *"Student Problems Likert responses and derived data must
+   * never influence any English proficiency score."* The two are in the same submission and, for the
+   * Likert answers, inside the very `answers` object this function is handed — so "never" is a claim
+   * about a code path, and the only way to test a claim about a code path is to vary the input it
+   * names and assert nothing moves.
+   *
+   * A signature check would be the weaker test: it would pass for an implementation that read the
+   * data from `answers` directly, which is exactly the mistake available here. Varying the values
+   * catches a read anywhere in the call graph.
+   */
+  const ENGLISH_ANSWERS: DraftAnswers = {
+    grammar: { 'grammar-fixture-1': 'b', 'grammar-fixture-2': 'a' },
+    vocabulary: { 'vocabulary-fixture-1': 'c' },
+    reading: { 'reading-fixture-1': 'b', 'reading-fixture-3': 'a' },
+  };
+
+  /** The three English sections only — what a score must be a function of. */
+  function englishOnly(scores: ReturnType<typeof scoreDeterministicSections>) {
+    return {
+      grammar: scores.grammar.score,
+      vocabulary: scores.vocabulary.score,
+      reading: scores.reading.score,
+    };
+  }
+
+  it('produces identical scores for opposite Likert answers', () => {
+    // Both extremes of the five-point scale, so a scorer that averaged them into anything would
+    // differ by the widest margin the data allows.
+    const allLow: DraftAnswers = {
+      ...ENGLISH_ANSWERS,
+      studentProblems: { likertAnswers: { 'sp-fixture-1': 1, 'sp-fixture-2': 1 } },
+    };
+    const allHigh: DraftAnswers = {
+      ...ENGLISH_ANSWERS,
+      studentProblems: { likertAnswers: { 'sp-fixture-1': 5, 'sp-fixture-2': 5 } },
+    };
+
+    expect(englishOnly(scoreDeterministicSections(allLow, CONTENT))).toEqual(
+      englishOnly(scoreDeterministicSections(allHigh, CONTENT)),
+    );
+  });
+
+  it('produces identical scores for open text that reads as an answer key', () => {
+    // The free-text response is the Student Problems field a scorer could plausibly be tempted to
+    // fold in. Asserted with text that *is* the correct answer to a fixture question, so an
+    // implementation that concatenated it into the English answers would score higher rather than
+    // merely differently — a failure this comparison cannot miss.
+    const withOpenText = scoreDeterministicSections(
+      { ...ENGLISH_ANSWERS, studentProblems: { likertAnswers: {}, openText: 'b' } },
+      CONTENT,
+    );
+    const withoutStudentProblems = scoreDeterministicSections(ENGLISH_ANSWERS, CONTENT);
+
+    expect(englishOnly(withOpenText)).toEqual(englishOnly(withoutStudentProblems));
+    expect(withOpenText).toEqual(withoutStudentProblems);
+  });
+
+  it('produces identical scores with no Student Problems answers at all', () => {
+    // The strongest form of the same assertion: not "different Likert values agree" but "the whole
+    // section may be absent and nothing moves". An implementation that read the section and
+    // defaulted from it would fail here and not above.
+    const answered = scoreDeterministicSections(
+      { ...ENGLISH_ANSWERS, studentProblems: { likertAnswers: { 'sp-fixture-1': 3 } } },
+      CONTENT,
+    );
+    const absent = scoreDeterministicSections(ENGLISH_ANSWERS, CONTENT);
+
+    expect(englishOnly(absent)).toEqual(englishOnly(answered));
+    expect(absent).toEqual(answered);
+  });
+
+  it('is a function of two arguments, so no Student Problems input has a way in', () => {
+    // The structural half of the checkpoint, stated with its own limits: a dependency introduced as
+    // a *third* argument — a `problemsContext`, say — would be caught here. A dependency reached
+    // through the two arguments this function already takes is what the tests above cover instead,
+    // and neither test is sufficient alone.
+    expect(scoreDeterministicSections.length).toBe(2);
+  });
+});

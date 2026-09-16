@@ -1,9 +1,15 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.ts';
+import { AINonRetryableError } from '../ai/errors.ts';
 import { hashPassword } from '../auth/passwordHasher.ts';
 import { getContentLoader } from '../content/ContentLoader.ts';
+import { processingJobRepository } from '../data/ProcessingJobRepository.ts';
+import { submissionRepository } from '../data/SubmissionRepository.ts';
+import { JOB_TYPES } from '../domain/jobs/jobTypes.ts';
+import { JobService } from '../domain/jobs/JobService.ts';
 import type { DraftAnswers } from '../shared/types/draft.ts';
+import { defaultWritingEvaluation } from '../test/fakeAIEvaluationService.ts';
 import { createCohort, createStaffUser, createSubmission, prisma, useCleanTestDatabase } from '../test/fixtures.ts';
 
 /**
@@ -636,6 +642,27 @@ function completeAnswers(): DraftAnswers {
   };
 }
 
+/**
+ * The job service the route's report is read back from, wired to the real content and repositories.
+ *
+ * Built here rather than imported as `getJobService()` so that a test cannot be affected by another
+ * test's singleton, and because the worker's own wiring is not what these tests are about.
+ */
+function jobService(): JobService {
+  return new JobService({
+    jobs: processingJobRepository,
+    submissions: submissionRepository,
+    content: getContentLoader(),
+  });
+}
+
+/** The writing job `finalize` enqueued for a submission. */
+async function writingJobOf(submissionId: string) {
+  return prisma().processingJob.findFirstOrThrow({
+    where: { submissionId, jobType: JOB_TYPES.writingEvaluation },
+  });
+}
+
 /** A cohort, a draft in it, and a verified session for that draft. */
 async function draftWithSession(answers: DraftAnswers = completeAnswers()) {
   const cohort = await createCohort({ code: COHORT_CODE });
@@ -904,6 +931,149 @@ describe('GET /api/student/report', () => {
     const report = await agent.get('/api/student/report').expect(200);
     expect(report.body.writingStatus).toBe('pending');
     expect(report.body.problemsTextStatus).toBe('pending');
+    // FR-FEEDBACK-004/008, and the reason `writing` is a separate field from `writingStatus`: there
+    // is no feedback to render yet, and the page must be able to tell that from the response rather
+    // than from a heading it wrote for `pending`.
+    expect(report.body.writing).toBeNull();
+  });
+
+  it('carries the writing results once the evaluation has finished (T7.3.3)', async () => {
+    // FR-WRITE-005/006/007 and FR-FEEDBACK-002/003. The evaluation is stored by driving the *real*
+    // `JobService`, not by writing a fixture into the columns: what `completeJob` stores and what
+    // this route reads are described in two different files, and this is the test that fails if the
+    // two stop agreeing.
+    const { submission, agent } = await draftWithSession();
+    const evaluation = defaultWritingEvaluation();
+    const rubric = getContentLoader().getContent('v1').writingRubric;
+
+    await agent.post('/api/student/submit').expect(200);
+    await jobService().completeJob(
+      (await writingJobOf(submission.id)).id,
+      evaluation,
+      { contentVersion: submission.contentVersion },
+    );
+
+    const report = await agent.get('/api/student/report').expect(200);
+
+    expect(report.body.writingStatus).toBe('succeeded');
+    // The fake answers 80 on all five criteria and the v1 weights are equal, so 80 is the expected
+    // overall under this rubric — asserted as a number, because a weight read at the wrong moment
+    // would still produce a plausible one.
+    expect(report.body.writing.overallScore).toBe(80);
+
+    // Every rubric criterion, in the rubric's own order, under the rubric's own label. Both facts
+    // come from the frozen content version; a keyed object on the row has neither.
+    expect(
+      report.body.writing.criteria.map((c: { key: string; label: string }) => [c.key, c.label]),
+    ).toEqual(rubric.criteria.map((criterion) => [criterion.key, criterion.label]));
+    expect(report.body.writing.criteria[0].score).toBe(80);
+    expect(report.body.writing.criteria[0].rationale).toBe(
+      evaluation.criteriaScores[rubric.criteria[0]?.key ?? '']?.rationale,
+    );
+
+    expect(report.body.writing.strengths).toEqual(evaluation.strengths);
+    expect(report.body.writing.weaknesses).toEqual(evaluation.weaknesses);
+    expect(report.body.writing.corrections).toEqual(evaluation.corrections);
+    expect(report.body.writing.suggestions).toEqual(evaluation.suggestions);
+  });
+
+  it('reports a failed evaluation as a status, with no results and nothing lost', async () => {
+    // FR-WRITE-011 / FR-FEEDBACK-007 / PRD Section 13's "processing failed / needs review" row: the
+    // deterministic results are still there, the original response is still there, and the writing
+    // section says what happened instead of showing results.
+    const { submission, agent } = await draftWithSession();
+    const essay = (completeAnswers().writing as { essayText: string }).essayText;
+
+    await agent.post('/api/student/submit').expect(200);
+
+    const job = await writingJobOf(submission.id);
+    await jobService().failJob(
+      job.id,
+      new AINonRetryableError('nothing to evaluate'),
+      { maxAttempts: 1, backoffMs: [0] },
+    );
+
+    const report = await agent.get('/api/student/report').expect(200);
+
+    expect(report.body.writingStatus).toBe('failed_needs_review');
+    expect(report.body.writing).toBeNull();
+    // The rest of the report is unharmed, which is the half of EDGE-004 that matters most.
+    expect(report.body.deterministic.grammar.questions.length).toBeGreaterThan(0);
+
+    const stored = await prisma().submission.findUniqueOrThrow({ where: { id: submission.id } });
+    expect((stored.answers as DraftAnswers).writing?.essayText).toBe(essay);
+  });
+
+  it('scores two students identically when only their Student Problems answers differ', async () => {
+    // FR-PROB-008/FR-PROB-012, the system-level form of the claim the scoring services' own suites
+    // make in isolation. Two submissions, identical English answers, Student Problems at opposite
+    // ends of the scale — and every number in the two reports has to agree, including the writing
+    // overall, which is the one score computed by a different service.
+    const cohort = await createCohort({ code: COHORT_CODE });
+    const englishAnswers = completeAnswers();
+
+    const submitFor = async (rollNumber: string, studentName: string, likert: number) => {
+      const submission = await createSubmission(cohort.id, {
+        rollNumberRaw: rollNumber,
+        rollNumberNormalized: rollNumber,
+        studentName,
+        contentVersion: 'v1',
+        answers: {
+          ...englishAnswers,
+          studentProblems: {
+            likertAnswers: Object.fromEntries(
+              getContentLoader()
+                .getContent('v1')
+                .studentProblems.statements.map((statement) => [statement.id, likert]),
+            ),
+            openText: likert === 1 ? 'No difficulties at all.' : 'أجد صعوبة كبيرة.',
+          },
+        },
+      });
+
+      const agent = await verifiedStudent({ rollNumber, studentName });
+      await agent.post('/api/student/submit').expect(200);
+
+      await jobService().completeJob(
+        (await writingJobOf(submission.id)).id,
+        defaultWritingEvaluation(),
+        { contentVersion: 'v1' },
+      );
+
+      return (await agent.get('/api/student/report').expect(200)).body;
+    };
+
+    const lowest = await submitFor('2021-002', 'Bob Example', 1);
+    const highest = await submitFor('2021-003', 'Carol Example', 5);
+
+    const englishOf = (report: typeof lowest) => ({
+      grammar: report.deterministic.grammar.score,
+      vocabulary: report.deterministic.vocabulary.score,
+      reading: report.deterministic.reading.score,
+      writing: report.writing.overallScore,
+    });
+
+    expect(englishOf(lowest)).toEqual(englishOf(highest));
+    // Asserted as a real score rather than as "both undefined": two nulls compare equal.
+    expect(englishOf(lowest).writing).toBe(80);
+  });
+
+  it('shows no results for a column that is not the shape evaluation writes', async () => {
+    // Defensive, and deliberately not a 500: a `succeeded` status with nothing readable behind it
+    // must not cost the student their Grammar, Vocabulary, and Reading results (FR-FEEDBACK-007).
+    // The page reads null as "we could not prepare this", which is the truth.
+    const { submission, agent } = await draftWithSession();
+
+    await agent.post('/api/student/submit').expect(200);
+    await prisma().submission.update({
+      where: { id: submission.id },
+      data: { writingStatus: 'succeeded', writingCriteriaScores: 'not an object' },
+    });
+
+    const report = await agent.get('/api/student/report').expect(200);
+
+    expect(report.body.writing).toBeNull();
+    expect(report.body.deterministic.vocabulary.questions.length).toBeGreaterThan(0);
   });
 
   it('carries each question’s prewritten explanation, including for a wrong answer', async () => {
