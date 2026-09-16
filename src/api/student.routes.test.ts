@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.ts';
 import { hashPassword } from '../auth/passwordHasher.ts';
 import { getContentLoader } from '../content/ContentLoader.ts';
+import type { DraftAnswers } from '../shared/types/draft.ts';
 import { createCohort, createStaffUser, createSubmission, prisma, useCleanTestDatabase } from '../test/fixtures.ts';
 
 /**
@@ -606,5 +607,627 @@ describe('GET /api/student/draft — access control', () => {
     await prisma().submission.deleteMany();
 
     await agent.get('/api/student/draft').expect(401, { error: 'Authentication required' });
+  });
+});
+
+/**
+ * A complete set of answers for the real content: every question answered correctly, a Writing
+ * response with something in it, and a scale response for every Student Problems statement.
+ *
+ * Built from the bundle rather than written out, so this cannot silently become incomplete when the
+ * content changes — a hardcoded answer set would start failing these tests for the wrong reason.
+ */
+function completeAnswers(): DraftAnswers {
+  const content = getContentLoader().getContent('v1');
+  const answerKey = (questions: { id: string; correctAnswer: string }[]) =>
+    Object.fromEntries(questions.map((question) => [question.id, question.correctAnswer]));
+
+  return {
+    grammar: answerKey(content.grammar.questions),
+    vocabulary: answerKey(content.vocabulary.questions),
+    reading: answerKey(content.reading.passages.flatMap((passage) => passage.questions)),
+    writing: { essayText: 'Learning a language rewards patience more than talent.' },
+    studentProblems: {
+      likertAnswers: Object.fromEntries(
+        content.studentProblems.statements.map((statement) => [statement.id, 5]),
+      ),
+      openText: 'أجد صعوبة في التحدث أمام زملائي.',
+    },
+  };
+}
+
+/** A cohort, a draft in it, and a verified session for that draft. */
+async function draftWithSession(answers: DraftAnswers = completeAnswers()) {
+  const cohort = await createCohort({ code: COHORT_CODE });
+  const submission = await createSubmission(cohort.id, {
+    rollNumberRaw: '2021-001',
+    rollNumberNormalized: '2021-001',
+    studentName: 'Alice Example',
+    contentVersion: 'v1',
+    answers,
+  });
+
+  return { submission, agent: await verifiedStudent() };
+}
+
+describe('POST /api/student/submit', () => {
+  it('submits a complete assessment and answers with the report', async () => {
+    const { submission, agent } = await draftWithSession();
+
+    const response = await agent.post('/api/student/submit').expect(200);
+
+    expect(response.body.contentVersion).toBe('v1');
+    expect(response.body.submittedAt).toEqual(expect.any(String));
+    expect((await prisma().submission.findUniqueOrThrow({ where: { id: submission.id } })).status)
+      .toBe('submitted');
+  });
+
+  it('returns the deterministic results immediately, with writing still pending', async () => {
+    // The requirement this endpoint exists for (FR-FEEDBACK-001): the section scores and the
+    // per-question explanations are in the submit response itself, computed synchronously, with no
+    // AI call made and none waited on. `writingStatus: 'pending'` is the honest state at that
+    // moment — the job has been enqueued and nothing has run it yet.
+    const content = getContentLoader().getContent('v1');
+    const { agent } = await draftWithSession();
+
+    const response = await agent.post('/api/student/submit').expect(200);
+
+    expect(response.body.writingStatus).toBe('pending');
+    expect(response.body.problemsTextStatus).toBe('pending');
+
+    // Every question was answered correctly, so each section is at full marks — and the maximum
+    // comes from content, so this cannot pass by counting a hardcoded question total.
+    const grammar = content.grammar.questions;
+    expect(response.body.deterministic.grammar.score).toBe(
+      grammar.reduce((total, question) => total + question.points, 0),
+    );
+    expect(response.body.deterministic.grammar.questions).toHaveLength(grammar.length);
+    expect(response.body.deterministic.reading.questions).toHaveLength(
+      content.reading.passages.flatMap((passage) => passage.questions).length,
+    );
+  });
+
+  it('carries the prewritten explanation for each question', async () => {
+    // FR-DET-004. The explanation is the content's own text, resolved through the submission's
+    // frozen version — not generated, and not read back from anywhere.
+    const content = getContentLoader().getContent('v1');
+    const { agent } = await draftWithSession();
+
+    const response = await agent.post('/api/student/submit').expect(200);
+
+    const firstQuestion = content.grammar.questions[0];
+    const scored = response.body.deterministic.grammar.questions.find(
+      (outcome: { questionId: string }) => outcome.questionId === firstQuestion?.id,
+    );
+
+    expect(scored).toMatchObject({
+      givenAnswer: firstQuestion?.correctAnswer,
+      correctAnswer: firstQuestion?.correctAnswer,
+      correct: true,
+      explanation: firstQuestion?.explanation,
+    });
+  });
+
+  it('records the submission so a later read sees it as submitted', async () => {
+    const { submission, agent } = await draftWithSession();
+
+    await agent.post('/api/student/submit').expect(200);
+
+    const stored = await prisma().submission.findUniqueOrThrow({ where: { id: submission.id } });
+    expect(stored.status).toBe('submitted');
+    expect(stored.submittedAt).toBeInstanceOf(Date);
+    expect(stored.problemsOpenTextOriginal).toBe('أجد صعوبة في التحدث أمام زملائي.');
+    expect(
+      await prisma().processingJob.count({ where: { submissionId: submission.id } }),
+    ).toBe(2);
+
+    const draft = await agent.get('/api/student/draft').expect(200);
+    expect(draft.body.status).toBe('submitted');
+  });
+
+  it('agrees with the score columns it wrote', async () => {
+    // The report recomputes the deterministic sections instead of reading the columns, because it
+    // needs the per-question explanations and those are not stored. Scoring is a pure function, so
+    // the two must be equal — this is the assertion that keeps "one number, two sources" honest.
+    const { submission, agent } = await draftWithSession();
+
+    const response = await agent.post('/api/student/submit').expect(200);
+    const stored = await prisma().submission.findUniqueOrThrow({ where: { id: submission.id } });
+
+    expect(response.body.deterministic.grammar.score).toBe(stored.grammarScore);
+    expect(response.body.deterministic.vocabulary.score).toBe(stored.vocabularyScore);
+    expect(response.body.deterministic.reading.score).toBe(stored.readingScore);
+  });
+
+  it('treats a second submit as success and answers with the same report', async () => {
+    // Section 11: a double-clicked submit is "treated as success — the existing report is returned,
+    // not an error". A student who clicks twice must not be shown a failure for it.
+    const { agent } = await draftWithSession();
+
+    const first = await agent.post('/api/student/submit').expect(200);
+    const second = await agent.post('/api/student/submit').expect(200);
+
+    expect(second.body).toEqual(first.body);
+  });
+
+  it('does not enqueue a second round of jobs on a repeated submit', async () => {
+    const { submission, agent } = await draftWithSession();
+
+    await agent.post('/api/student/submit').expect(200);
+    await agent.post('/api/student/submit').expect(200);
+
+    expect(
+      await prisma().processingJob.count({ where: { submissionId: submission.id } }),
+    ).toBe(2);
+  });
+
+  it('refuses an unfinished assessment and names the sections that are not done', async () => {
+    // The server rule is authoritative (FR-ASSESS-007). The client gates its button on the same
+    // rule, so this refusal is for the stale tab or the client bug — but it still has to say which
+    // sections, which is the whole point of the server owning the rule.
+    const answers = completeAnswers();
+    delete answers.reading;
+    const { submission, agent } = await draftWithSession(answers);
+
+    const response = await agent.post('/api/student/submit').expect(400);
+
+    expect(response.body.incompleteSections).toEqual(['reading']);
+    expect(response.body.error).toEqual(expect.any(String));
+
+    // And the refusal left the draft a draft: still editable, nothing scored, no jobs enqueued.
+    const stored = await prisma().submission.findUniqueOrThrow({ where: { id: submission.id } });
+    expect(stored.status).toBe('draft');
+    expect(stored.submittedAt).toBeNull();
+    expect(stored.grammarScore).toBeNull();
+    expect(await prisma().processingJob.count({ where: { submissionId: submission.id } })).toBe(0);
+
+    await agent
+      .patch('/api/student/draft')
+      .send({ section: 'reading', sectionAnswers: { 'reading-001': 'b' } })
+      .expect(200);
+  });
+
+  it('never requires the open-ended Student Problems answer', async () => {
+    const answers = completeAnswers();
+    const studentProblems = { ...answers.studentProblems, openText: '' };
+    const { agent } = await draftWithSession({ ...answers, studentProblems });
+
+    const response = await agent.post('/api/student/submit').expect(200);
+
+    expect(response.body.problemsTextStatus).toBe('not_applicable');
+    expect(response.body.deterministic.grammar.score).toBeGreaterThan(0);
+  });
+
+  it('reads the session submission and has no field to point at another', async () => {
+    // NFR-SEC-009's shape on a write path. The route reads no body at all, so a name for someone
+    // else's submission has nowhere to land — there is nothing to defeat rather than a check to
+    // pass.
+    const cohort = await createCohort({ code: COHORT_CODE });
+    const mine = await createSubmission(cohort.id, {
+      rollNumberRaw: '2021-001',
+      rollNumberNormalized: '2021-001',
+      studentName: 'Alice Example',
+      contentVersion: 'v1',
+      answers: completeAnswers(),
+    });
+    const theirs = await createSubmission(cohort.id, {
+      rollNumberRaw: '2021-002',
+      rollNumberNormalized: '2021-002',
+      studentName: 'Bob Example',
+      contentVersion: 'v1',
+      answers: completeAnswers(),
+    });
+
+    await (await verifiedStudent())
+      .post('/api/student/submit')
+      .send({ submissionId: theirs.id })
+      .expect(200);
+
+    expect((await prisma().submission.findUniqueOrThrow({ where: { id: mine.id } })).status).toBe(
+      'submitted',
+    );
+    expect((await prisma().submission.findUniqueOrThrow({ where: { id: theirs.id } })).status).toBe(
+      'draft',
+    );
+  });
+
+  it('rejects a request carrying no student session', async () => {
+    await request(createApp())
+      .post('/api/student/submit')
+      .expect(401, { error: 'Authentication required' });
+  });
+
+  it('rejects a staff session', async () => {
+    // Section 9: neither session type grants access to the other's routes.
+    await createStaffUser({ email: STAFF_EMAIL, passwordHash: await hashPassword(STAFF_PASSWORD) });
+
+    const agent = request.agent(createApp());
+    await agent
+      .post('/api/staff/login')
+      .send({ email: STAFF_EMAIL, password: STAFF_PASSWORD })
+      .expect(200);
+
+    await agent.post('/api/student/submit').expect(401, { error: 'Authentication required' });
+  });
+
+  it('refuses a session naming a submission that no longer exists', async () => {
+    await createCohort({ code: COHORT_CODE });
+    const agent = await verifiedStudent();
+
+    await prisma().submission.deleteMany();
+
+    await agent.post('/api/student/submit').expect(401, { error: 'Authentication required' });
+  });
+
+  it('leaves the submitted record unwritable afterwards', async () => {
+    // FR-ASSESS-008 end to end: once submitted, the assessment cannot be edited, restarted, or
+    // retaken. The autosave route is the way back in, and it must refuse.
+    const { agent } = await draftWithSession();
+
+    await agent.post('/api/student/submit').expect(200);
+
+    const refused = await agent
+      .patch('/api/student/draft')
+      .send({ section: 'grammar', sectionAnswers: { 'grammar-001': 'a' } })
+      .expect(409);
+
+    expect(refused.body.error).toContain('already been submitted');
+  });
+});
+
+describe('GET /api/student/report', () => {
+  it('has the deterministic results ready immediately after submitting', async () => {
+    // FR-FEEDBACK-001: no AI call is made, none is waited on, and none is needed — the scores and
+    // explanations are already in the response.
+    const content = getContentLoader().getContent('v1');
+    const { agent } = await draftWithSession();
+
+    await agent.post('/api/student/submit').expect(200);
+    const report = await agent.get('/api/student/report').expect(200);
+
+    const grammar = content.grammar.questions;
+    expect(report.body.deterministic.grammar.score).toBe(
+      grammar.reduce((total, question) => total + question.points, 0),
+    );
+    expect(report.body.deterministic.grammar.questions).toHaveLength(grammar.length);
+    expect(report.body.deterministic.vocabulary.questions.length).toBeGreaterThan(0);
+    expect(report.body.deterministic.reading.questions.length).toBeGreaterThan(0);
+  });
+
+  it('reports writing as still being prepared, not as finished', async () => {
+    // FR-FEEDBACK-004/008: the report must not imply it is complete. `pending` is what the page
+    // turns into that wording, and reaching `succeeded` is E7's job, not this endpoint's.
+    const { agent } = await draftWithSession();
+
+    await agent.post('/api/student/submit').expect(200);
+
+    const report = await agent.get('/api/student/report').expect(200);
+    expect(report.body.writingStatus).toBe('pending');
+    expect(report.body.problemsTextStatus).toBe('pending');
+  });
+
+  it('carries each question’s prewritten explanation, including for a wrong answer', async () => {
+    // FR-DET-004 — the explanation is shown per question, and a student who answered incorrectly is
+    // exactly who needs it. The answer key is never sent before submission; here, after it, the
+    // student's own answer and the explanation are both theirs to see.
+    const content = getContentLoader().getContent('v1');
+    const firstQuestion = content.grammar.questions[0];
+    const answers = completeAnswers();
+    const wrongAnswer = firstQuestion?.options?.find(
+      (option) => option.id !== firstQuestion.correctAnswer,
+    )?.id;
+
+    const { agent } = await draftWithSession({
+      ...answers,
+      grammar: { ...answers.grammar, [firstQuestion?.id ?? '']: wrongAnswer ?? 'a' },
+    });
+
+    await agent.post('/api/student/submit').expect(200);
+    const report = await agent.get('/api/student/report').expect(200);
+
+    const scored = report.body.deterministic.grammar.questions.find(
+      (outcome: { questionId: string }) => outcome.questionId === firstQuestion?.id,
+    );
+
+    expect(scored).toMatchObject({
+      correct: false,
+      givenAnswer: wrongAnswer,
+      correctAnswer: firstQuestion?.correctAnswer,
+      explanation: firstQuestion?.explanation,
+    });
+  });
+
+  it('carries the question and the chosen answer’s text, so the report is readable', async () => {
+    // An explanation is only useful beside the question it explains, and "you chose b" is not an
+    // answer a student can read. The route joins scoring's outcome with the content bundle's text,
+    // which is why the report carries both the ids and their text.
+    const content = getContentLoader().getContent('v1');
+    const firstQuestion = content.grammar.questions[0];
+    const chosenOption = firstQuestion?.options?.[1];
+
+    const answers = completeAnswers();
+    const { agent } = await draftWithSession({
+      ...answers,
+      grammar: { ...answers.grammar, [firstQuestion?.id ?? '']: chosenOption?.id ?? 'a' },
+    });
+
+    await agent.post('/api/student/submit').expect(200);
+    const report = await agent.get('/api/student/report').expect(200);
+
+    expect(report.body.deterministic.grammar.title).toBe(content.grammar.title);
+
+    const scored = report.body.deterministic.grammar.questions[0];
+    expect(scored).toEqual({
+      questionId: firstQuestion?.id,
+      prompt: firstQuestion?.prompt,
+      givenAnswer: chosenOption?.id,
+      givenAnswerText: chosenOption?.text,
+      correctAnswer: firstQuestion?.correctAnswer,
+      correctAnswerText: firstQuestion?.options?.find(
+        (option) => option.id === firstQuestion.correctAnswer,
+      )?.text,
+      correct: chosenOption?.id === firstQuestion?.correctAnswer,
+      explanation: firstQuestion?.explanation,
+    });
+  });
+
+  it('shows every question in the section, in the order the assessment presented them', async () => {
+    const content = getContentLoader().getContent('v1');
+    const { agent } = await draftWithSession();
+
+    await agent.post('/api/student/submit').expect(200);
+    const report = await agent.get('/api/student/report').expect(200);
+
+    expect(
+      report.body.deterministic.grammar.questions.map((question: { questionId: string }) => question.questionId),
+    ).toEqual(content.grammar.questions.map((question) => question.id));
+
+    // Reading's questions are gathered across its passages, and so is the report's list.
+    expect(
+      report.body.deterministic.reading.questions.map((question: { questionId: string }) => question.questionId),
+    ).toEqual(content.reading.passages.flatMap((passage) => passage.questions).map((q) => q.id));
+  });
+
+  it('shows a stored answer that names no option rather than showing nothing', async () => {
+    // The autosave schema accepts any string as a choice answer, so this is a stored state the
+    // report can be asked about. It has no option text — and the report says what is actually
+    // stored instead of rendering a blank where the answer goes.
+    const content = getContentLoader().getContent('v1');
+    const firstQuestion = content.grammar.questions[0];
+    const answers = completeAnswers();
+
+    const cohort = await createCohort({ code: COHORT_CODE });
+    await createSubmission(cohort.id, {
+      rollNumberRaw: '2021-001',
+      rollNumberNormalized: '2021-001',
+      studentName: 'Alice Example',
+      contentVersion: 'v1',
+      status: 'submitted',
+      answers: { ...answers, grammar: { ...answers.grammar, [firstQuestion?.id ?? '']: 'not-an-option' } },
+    });
+
+    const report = await (await verifiedStudent()).get('/api/student/report').expect(200);
+    const scored = report.body.deterministic.grammar.questions[0];
+
+    expect(scored).toMatchObject({
+      givenAnswer: 'not-an-option',
+      givenAnswerText: null,
+      correct: false,
+    });
+  });
+
+  it('describes a question the stored answers do not cover as not answered', async () => {
+    // Not reachable by submitting — completeness requires every deterministic question to carry an
+    // answer — so this row is written directly. The report still has to describe it, because the
+    // report describes what is stored: a question with no stored answer is "not answered", which is
+    // a different thing from a blank answer, and the page renders the two differently.
+    const content = getContentLoader().getContent('v1');
+    const firstQuestion = content.grammar.questions[0];
+    const answers = completeAnswers();
+    const grammar = { ...answers.grammar };
+    delete grammar[firstQuestion?.id ?? ''];
+
+    const cohort = await createCohort({ code: COHORT_CODE });
+    await createSubmission(cohort.id, {
+      rollNumberRaw: '2021-001',
+      rollNumberNormalized: '2021-001',
+      studentName: 'Alice Example',
+      contentVersion: 'v1',
+      status: 'submitted',
+      answers: { ...answers, grammar },
+    });
+
+    const report = await (await verifiedStudent()).get('/api/student/report').expect(200);
+    const scored = report.body.deterministic.grammar.questions.find(
+      (outcome: { questionId: string }) => outcome.questionId === firstQuestion?.id,
+    );
+
+    expect(scored).toMatchObject({
+      givenAnswer: null,
+      correct: false,
+      explanation: firstQuestion?.explanation,
+    });
+  });
+
+  it('is the same report a returning student sees', async () => {
+    // FR-FEEDBACK-005: the report is a read of stored state, not a response to having just
+    // submitted. A student who comes back tomorrow gets the identical thing.
+    const { agent } = await draftWithSession();
+
+    const submitted = await agent.post('/api/student/submit').expect(200);
+
+    // A fresh session, obtained the only way one can be — by verifying the identity again.
+    const returning = await (await verifiedStudent()).get('/api/student/report').expect(200);
+
+    expect(returning.body).toEqual(submitted.body);
+  });
+
+  it('refuses a report for an assessment that has not been submitted', async () => {
+    // PRD Section 13: a draft is "not a 'result' state". Serving scores here would let a student
+    // read their marks before the transition that makes them final.
+    const { submission, agent } = await draftWithSession();
+
+    const refused = await agent.get('/api/student/report').expect(409);
+
+    expect(refused.body.error).toContain('has not been submitted');
+    // The refusal must not carry results in its body.
+    expect(refused.body).not.toHaveProperty('deterministic');
+    expect(refused.body).not.toHaveProperty('incompleteSections');
+    expect((await prisma().submission.findUniqueOrThrow({ where: { id: submission.id } })).status)
+      .toBe('draft');
+  });
+
+  it('reads the session submission and has no field to point at another', async () => {
+    const cohort = await createCohort({ code: COHORT_CODE });
+    await createSubmission(cohort.id, {
+      rollNumberRaw: '2021-001',
+      rollNumberNormalized: '2021-001',
+      studentName: 'Alice Example',
+      contentVersion: 'v1',
+      answers: completeAnswers(),
+    });
+    await createSubmission(cohort.id, {
+      rollNumberRaw: '2021-002',
+      rollNumberNormalized: '2021-002',
+      studentName: 'Bob Example',
+      contentVersion: 'v1',
+      answers: completeAnswers(),
+    });
+
+    const alice = await verifiedStudent();
+    const bob = await verifiedStudent({ rollNumber: '2021-002', studentName: 'Bob Example' });
+
+    await alice.post('/api/student/submit').expect(200);
+
+    // Bob has not submitted, so his report does not exist — and Alice's is not reachable through
+    // his session whatever he asks for.
+    await bob.get('/api/student/report').expect(409);
+    await bob.get(`/api/student/report?submissionId=${(await prisma().submission.findFirstOrThrow({ where: { studentName: 'Alice Example' } })).id}`)
+      .expect(409);
+
+    const aliceReport = await alice.get('/api/student/report').expect(200);
+    expect(aliceReport.body.deterministic.grammar.score).toBeGreaterThan(0);
+  });
+
+  it('rejects a request carrying no student session', async () => {
+    await request(createApp())
+      .get('/api/student/report')
+      .expect(401, { error: 'Authentication required' });
+  });
+
+  it('rejects a staff session', async () => {
+    await createStaffUser({ email: STAFF_EMAIL, passwordHash: await hashPassword(STAFF_PASSWORD) });
+
+    const agent = request.agent(createApp());
+    await agent
+      .post('/api/staff/login')
+      .send({ email: STAFF_EMAIL, password: STAFF_PASSWORD })
+      .expect(200);
+
+    await agent.get('/api/student/report').expect(401, { error: 'Authentication required' });
+  });
+
+  it('refuses a session naming a submission that no longer exists', async () => {
+    await createCohort({ code: COHORT_CODE });
+    const agent = await verifiedStudent();
+
+    await prisma().submission.deleteMany();
+
+    await agent.get('/api/student/report').expect(401, { error: 'Authentication required' });
+  });
+
+  it('does not leak an answer key into a refusal', async () => {
+    // A refused request is where a careless implementation would put the data it was about to send.
+    const { agent } = await draftWithSession();
+
+    const refused = await agent.get('/api/student/report').expect(409);
+
+    expect(JSON.stringify(refused.body)).not.toContain('correctAnswer');
+    expect(JSON.stringify(refused.body)).not.toContain('explanation');
+  });
+
+  it('answers with nothing that identifies the submission', async () => {
+    // NFR-SEC-009 again, on the read path: the report names no id, so there is nothing in it to
+    // learn about another student even if it were somehow shared.
+    const { submission, agent } = await draftWithSession();
+
+    await agent.post('/api/student/submit').expect(200);
+    const report = await agent.get('/api/student/report').expect(200);
+
+    expect(JSON.stringify(report.body)).not.toContain(submission.id);
+    expect(report.body).not.toHaveProperty('id');
+    expect(report.body).not.toHaveProperty('submissionId');
+    expect(report.body).not.toHaveProperty('studentName');
+    expect(report.body).not.toHaveProperty('rollNumber');
+  });
+});
+
+describe('A returning student (T5.3.3)', () => {
+  /**
+   * Everything a student who has already finished can do.
+   *
+   * PRD Section 8.2 and FR-STU-006: re-entering their details must show the saved report and must
+   * not offer a new attempt — the student "cannot edit, restart, or resubmit". Those are three
+   * refusals from three different places: the autosave route's `status='draft'` predicate, the
+   * status the draft endpoint reports, and `finalize`'s idempotent no-op. Each is asserted against
+   * the route that owns it rather than inferred from one of them.
+   *
+   * ## Why these two tests and not six
+   *
+   * `student-verify` is rate-limited per IP (T3.3.3), and the limit is real for the whole file — a
+   * suite that verifies an identity once per assertion would exhaust the budget and start failing
+   * with 429s that have nothing to do with what it is testing. Neither the limit nor its assertions
+   * are weakened here; the tests are grouped so each session is obtained once and then exercised,
+   * which is also closer to what a returning student actually does.
+   */
+  it('re-verifying the identity reports the submission as submitted, not a new draft', async () => {
+    const { agent: firstVisit } = await draftWithSession();
+    await firstVisit.post('/api/student/submit').expect(200);
+
+    // The return visit: the details are entered again, which is the only way back in (Section 9).
+    const verify = await request(createApp())
+      .post('/api/session/student-verify')
+      .send({ cohortCode: COHORT_CODE, rollNumber: '2021-001', studentName: 'Alice Example' })
+      .expect(200);
+
+    // This is what `EntryPage` routes on — `draft` sends the student into the assessment,
+    // `submitted` sends them to their report (FR-STU-006). Anything but `submitted` here and a
+    // finished student is offered a second attempt.
+    expect(verify.body).toEqual({ status: 'submitted' });
+    expect(await prisma().submission.count()).toBe(1);
+  });
+
+  it('sees the saved report, and can neither edit, restart, nor resubmit', async () => {
+    const { submission, agent } = await draftWithSession();
+    const submitted = await agent.post('/api/student/submit').expect(200);
+    const finalized = await prisma().submission.findUniqueOrThrow({ where: { id: submission.id } });
+
+    // Back for another visit, with the session the student already holds.
+    const report = await agent.get('/api/student/report').expect(200);
+    expect(report.body).toEqual(submitted.body);
+    expect(report.body.deterministic.grammar.questions.length).toBeGreaterThan(0);
+
+    // Cannot restart: `/assessment` routes a submitted student onward on this status (Section 9).
+    const draft = await agent.get('/api/student/draft').expect(200);
+    expect(draft.body.status).toBe('submitted');
+
+    // Cannot edit.
+    const refused = await agent
+      .patch('/api/student/draft')
+      .send({ section: 'grammar', sectionAnswers: { 'grammar-001': 'a' } })
+      .expect(409);
+    expect(refused.body.error).toContain('already been submitted');
+
+    // Cannot resubmit into a second attempt: the same report comes back, and nothing is re-enqueued.
+    const again = await agent.post('/api/student/submit').expect(200);
+    expect(again.body).toEqual(submitted.body);
+
+    // The strongest form of "no new attempt": the row is byte-for-byte the one that was finalized,
+    // and the two jobs enqueued at submission are still the only two.
+    expect(await prisma().submission.count()).toBe(1);
+    expect(await prisma().processingJob.count()).toBe(2);
+    expect(await prisma().submission.findUniqueOrThrow({ where: { id: submission.id } })).toEqual(
+      finalized,
+    );
   });
 });

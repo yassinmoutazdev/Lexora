@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { DraftAnswers, DraftAutosaveBody, SectionKey } from '../../../src/shared/types/draft';
+import type { DraftAnswers, DraftAutosaveBody } from '../../../src/shared/types/draft';
+import type { SectionKey } from '../../../src/shared/types/sections';
 import { saveSection } from '../api/client';
 
 /**

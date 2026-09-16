@@ -426,3 +426,66 @@ button.secondary:hover:not(:disabled) {
   margin: 0.5rem 0 0;
   padding-left: 1.2rem;
 }
+
+/* ---------------------------------------------------------------- report */
+
+/* The section's score, beside its title. Muted rather than emphasised: the explanations below are
+   what the student is meant to read, and the number is a summary of them. */
+.score {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.report-question {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 1rem;
+  margin-top: 1rem;
+}
+
+.report-question:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.report-prompt {
+  font-weight: 500;
+  margin-bottom: 0.4rem;
+}
+
+.report-answer {
+  margin: 0.2rem 0;
+}
+
+/*
+ * Correct / incorrect is written out, not only coloured. Colour alone would carry the whole meaning
+ * for a reader who cannot distinguish these two hues, and the word is the meaning anyway.
+ */
+.verdict {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.verdict--correct {
+  color: var(--ok-ink);
+}
+
+.verdict--wrong {
+  color: var(--alert-ink);
+}
+
+.report-explanation {
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  margin-top: 0.5rem;
+}
+
+.report-status {
+  font-size: 0.87rem;
+  color: var(--ink-faint);
+  min-height: 1.4em;
+}

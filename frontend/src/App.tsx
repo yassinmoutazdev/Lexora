@@ -1,5 +1,6 @@
 import { AssessmentPage } from './pages/student/AssessmentPage';
 import { EntryPage } from './pages/student/EntryPage';
+import { ReportPage } from './pages/student/ReportPage';
 import { Link, usePathname } from './router';
 
 /**
@@ -31,7 +32,7 @@ export function App() {
       return <AssessmentPage />;
 
     case '/report':
-      return <NotBuiltYet title="Your report" task="T5.3.2" />;
+      return <ReportPage />;
 
     case '/staff/login':
       return <NotBuiltYet title="Staff login" task="T8.3.2" />;

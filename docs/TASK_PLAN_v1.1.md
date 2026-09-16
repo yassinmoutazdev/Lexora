@@ -394,31 +394,31 @@ Each Epic is one session. The following applies to every Epic and is not repeate
 
 ### Feature 5.1 — Deterministic Scoring Engine
 
-- [ ] T5.1.1 — Implement `src/domain/scoring/DeterministicScoringService.ts`: a pure function scoring Grammar/Vocabulary/Reading against `ContentLoader` content for the submission's `contentVersion`, including per-question prewritten-explanation lookup.
+- [x] T5.1.1 — Implement `src/domain/scoring/DeterministicScoringService.ts`: a pure function scoring Grammar/Vocabulary/Reading against `ContentLoader` content for the submission's `contentVersion`, including per-question prewritten-explanation lookup.
       Ref: PRD Section 9.3 (FR-DET-001/002/003/004); ARCHITECTURE Section 7 (DeterministicScoringService), Section 18
       Output: src/domain/scoring/DeterministicScoringService.ts + test · unit tests cover correct/incorrect scoring and explanation lookup against fixture content, with no database dependency
 
 ### Feature 5.2 — Submission Finalization
 
-- [ ] T5.2.1 — Implement `src/domain/submission/SubmissionService.finalize()`: transactional read-check-write — idempotent no-op if already submitted, rejects if required sections are incomplete, otherwise scores deterministic sections, sets `status='submitted'`/`submittedAt`, and inserts a `writing_eval` job (plus a `student_problems_text` job if open text was provided).
+- [x] T5.2.1 — Implement `src/domain/submission/SubmissionService.finalize()`: transactional read-check-write — idempotent no-op if already submitted, rejects if required sections are incomplete, otherwise scores deterministic sections, sets `status='submitted'`/`submittedAt`, and inserts a `writing_eval` job (plus a `student_problems_text` job if open text was provided).
       Ref: PRD Section 9.2 (FR-ASSESS-008), Section 9.6 (FR-FEEDBACK-001); ARCHITECTURE Section 3 (Data Flow — Student Submits), Section 6 (Transaction boundaries #1), Section 12 (Immutable after submission, Safe retries), Section 18
       Output: src/domain/submission/SubmissionService.ts + SubmissionService.test.ts · integration test (real test DB): first submit succeeds; a second attempt for the same identity is an idempotent no-op; simulated concurrent submits never create two rows; incomplete required sections are rejected · job rows are inserted inside the finalize transaction directly (E6's `JobService`/`ProcessingJobRepository` consume them; they are not a prerequisite here)
-- [ ] T5.2.2 — Implement `POST /api/student/submit` calling `SubmissionService.finalize()`.
+- [x] T5.2.2 — Implement `POST /api/student/submit` calling `SubmissionService.finalize()`.
       Ref: ARCHITECTURE Section 10 (API contract — submit)
       Output: src/api/student.routes.ts (POST submit) · integration test: submit response contains deterministic results with `writingStatus='pending'`
-- [ ] T5.2.3 — Add a direct database-constraint test proving a duplicate `(cohortId, rollNumberNormalized)` insert is rejected by Postgres itself.
+- [x] T5.2.3 — Add a direct database-constraint test proving a duplicate `(cohortId, rollNumberNormalized)` insert is rejected by Postgres itself.
       Ref: ARCHITECTURE Section 6 (Why these choices), Section 15 (Database constraints test)
       Output: integration test in the SubmissionRepository suite · duplicate insert is rejected at the database level
 
 ### Feature 5.3 — Report Endpoint (Deterministic View)
 
-- [ ] T5.3.1 — Implement `GET /api/student/report`: reads the current `Submission` row and shapes deterministic sections (always populated once `status='submitted'`) plus current writing/problems processing status.
+- [x] T5.3.1 — Implement `GET /api/student/report`: reads the current `Submission` row and shapes deterministic sections (always populated once `status='submitted'`) plus current writing/problems processing status.
       Ref: PRD Section 9.6 (FR-FEEDBACK-001/004/008), Section 13 (Feedback and Result States); ARCHITECTURE Section 7 (Report generation), Section 10
       Output: src/api/student.routes.ts (GET report) · integration test: immediately after submit, response includes deterministic scores/explanations and `writingStatus='pending'` without waiting on any AI call
-- [ ] T5.3.2 — Build `ReportPage.tsx`: displays deterministic section scores and the per-question prewritten explanation for each answer given, immediately; shows "Writing feedback is still being prepared" while `writingStatus='pending'`; polls the report endpoint every ~10s only while pending; never implies the report is already complete.
+- [x] T5.3.2 — Build `ReportPage.tsx`: displays deterministic section scores and the per-question prewritten explanation for each answer given, immediately; shows "Writing feedback is still being prepared" while `writingStatus='pending'`; polls the report endpoint every ~10s only while pending; never implies the report is already complete.
       Ref: PRD Section 8.1 (step 9), Section 9.3 (FR-DET-004), Section 9.6 (FR-FEEDBACK-002/003/004/008); ARCHITECTURE Section 5 (ReportPage polling)
       Output: frontend/src/pages/student/ReportPage.tsx · manual verification: deterministic results visible immediately after submit; polling stops once status leaves 'pending'
-- [ ] T5.3.3 — Wire returning-visit routing: re-verifying identity for an already-submitted student re-issues the session and routes to `/report`, never `/assessment`.
+- [x] T5.3.3 — Wire returning-visit routing: re-verifying identity for an already-submitted student re-issues the session and routes to `/report`, never `/assessment`.
       Ref: PRD Section 8.2 (Student journey — return visit), Section 9.1 (FR-STU-006); ARCHITECTURE Section 9 (Student routes)
       Output: EntryPage/session.routes.ts routing logic · manual verification: a returning student sees the saved report and cannot edit, restart, or resubmit
 

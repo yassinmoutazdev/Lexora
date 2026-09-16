@@ -1,4 +1,4 @@
-import type { Submission, SubmissionStatus } from '@prisma/client';
+import type { Prisma, ProcessingStatus, Submission, SubmissionStatus } from '@prisma/client';
 import { getPrismaClient } from './prismaClient.ts';
 
 /**
@@ -157,7 +157,111 @@ export class SubmissionRepository {
 
     return { outcome: 'not_draft', status: existing.status };
   }
+
+  /**
+   * Runs `fn` inside one database transaction.
+   *
+   * Exposed as a *handle* rather than as a repository method per finalization step, because
+   * finalization's steps are not independent queries — they are one read-check-write whose middle
+   * step is a domain decision (Section 6, transaction boundary #1). The decision has to be made
+   * between the read and the write, inside the same transaction, so the shape that works is the one
+   * where the caller sequences the steps and this layer performs them.
+   *
+   * The alternative — reading outside, deciding, then writing — is exactly the race the transaction
+   * exists to close: two submits that both read `status='draft'` would both decide to finalize, and
+   * only the database could stop the second.
+   */
+  async transaction<T>(fn: (tx: SubmissionTx) => Promise<T>): Promise<T> {
+    return getPrismaClient().$transaction(fn);
+  }
+
+  /**
+   * Reads a submission and holds a row lock on it until the transaction ends — `SELECT … FOR
+   * UPDATE` (Section 3's finalize flow).
+   *
+   * This is the mechanism that makes finalization idempotent under concurrency rather than merely
+   * under repetition, and it is deliberately a *database* mechanism. A second finalize that arrives
+   * while the first is mid-transaction blocks here, and when the first commits, the lock is granted
+   * on the row's new version — so the second reads `status='submitted'` and becomes a no-op. An
+   * application-level check could not do this: it would have to run before the lock, which is the
+   * one place it is guaranteed to be looking at stale state.
+   *
+   * Returns null when there is no such row, so a caller can distinguish "gone" from "locked".
+   */
+  async lockById(tx: SubmissionTx, id: string): Promise<Submission | null> {
+    const locked = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "Submission" WHERE "id" = ${id} FOR UPDATE
+    `;
+
+    if (locked.length === 0) return null;
+
+    // Read through the typed client rather than from the raw row, so the caller gets a `Submission`
+    // and not a map of columns. It is the row just locked, in this transaction, so it cannot change
+    // between the two statements.
+    return tx.submission.findUnique({ where: { id } });
+  }
+
+  /**
+   * The finalize write: draft becomes the immutable submitted record (Section 3, Section 12).
+   *
+   * Called only from inside the transaction that holds the row lock, which is why it carries no
+   * `status = 'draft'` predicate of its own — the lock has already established that this caller is
+   * the only one looking at the row, and the caller has already decided. Adding a second guard here
+   * would make the version in `SubmissionService` untestable while appearing to be the real one.
+   *
+   * `answers` is deliberately absent from the write: it is the frozen record, already complete, and
+   * nothing during finalization changes it.
+   */
+  async markSubmitted(tx: SubmissionTx, id: string, write: FinalizeWrite): Promise<Submission> {
+    return tx.submission.update({
+      where: { id },
+      data: {
+        status: 'submitted',
+        submittedAt: new Date(),
+        ...write,
+      },
+    });
+  }
+
+  /**
+   * Inserts a finalized submission's processing jobs (Section 3, Section 6 boundary #1).
+   *
+   * Takes job-type strings rather than an enum because `ProcessingJob.jobType` is a plain string
+   * column (Section 6): the set of job types belongs to the domain layer that enqueues and consumes
+   * them, not to the query that stores them.
+   *
+   * `status` and `nextAttemptAt` are left to their schema defaults — `pending` and now — so a job is
+   * claimable by the worker's very next poll tick without this having to state either.
+   */
+  async enqueueJobs(tx: SubmissionTx, submissionId: string, jobTypes: string[]): Promise<void> {
+    if (jobTypes.length === 0) return;
+
+    await tx.processingJob.createMany({
+      data: jobTypes.map((jobType) => ({ submissionId, jobType })),
+    });
+  }
 }
+
+/**
+ * A handle for a transaction the caller owns.
+ *
+ * Named here rather than taking Prisma's type at every call site, so the domain service can pass a
+ * transaction around without naming the client library.
+ */
+export type SubmissionTx = Prisma.TransactionClient;
+
+/** The columns finalization writes onto the submission it finalizes (Section 3). */
+export type FinalizeWrite = {
+  grammarScore: number;
+  vocabularyScore: number;
+  readingScore: number;
+  /** The structured scale responses, lifted out of `answers` into their own column (Section 6). */
+  problemsLikertAnswers: Record<string, number>;
+  /** Written exactly once, here, and never again (FR-PROB-009, Section 12). */
+  problemsOpenTextOriginal: string | null;
+  writingStatus: ProcessingStatus;
+  problemsTextStatus: ProcessingStatus;
+};
 
 /**
  * What a section merge did — or, when it did nothing, which of the two reasons applies.

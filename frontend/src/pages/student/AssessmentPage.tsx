@@ -3,9 +3,8 @@ import type {
   AssessmentContent,
   ChoiceAnswers,
   DraftAnswers,
-  SectionKey,
 } from '../../../../src/shared/types/draft';
-import { SECTION_KEYS } from '../../../../src/shared/types/draft';
+import { SECTION_KEYS, type SectionKey } from '../../../../src/shared/types/sections';
 import { ApiError, getDraft, submitAssessment } from '../../api/client';
 import { assessCompleteness } from '../../assessmentCompleteness';
 import { ChoiceQuestions } from '../../components/ChoiceQuestions';

@@ -1,5 +1,5 @@
-import type { AssessmentContent, DraftAnswers, SectionKey } from '../../src/shared/types/draft';
-import { SECTION_KEYS } from '../../src/shared/types/draft';
+import type { AssessmentContent, DraftAnswers } from '../../src/shared/types/draft';
+import { SECTION_KEYS, type SectionKey } from '../../src/shared/types/sections';
 
 /**
  * Whether the assessment has enough in it to be submitted (FR-ASSESS-007).

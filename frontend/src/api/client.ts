@@ -1,9 +1,5 @@
-import type {
-  DraftAutosaveBody,
-  SectionKey,
-  StudentDraft,
-  SubmissionStatus,
-} from '../../../src/shared/types/draft';
+import type { DraftAutosaveBody, StudentDraft, StudentReport } from '../../../src/shared/types/draft';
+import type { SectionKey, SubmissionStatus } from '../../../src/shared/types/sections';
 
 /**
  * The frontend's typed wrapper over `fetch` (ARCHITECTURE Section 4 — `frontend/src/api/client.ts`).
@@ -202,4 +198,18 @@ export async function saveSection(
  */
 export async function submitAssessment(): Promise<void> {
   await requestJson<unknown>('/api/student/submit', { method: 'POST' });
+}
+
+/**
+ * Fetches the report for the session's submission (Section 10).
+ *
+ * The same response `submitAssessment` produces, which is the point: submitting and returning later
+ * are the same read of the same stored state (FR-FEEDBACK-005), so a student who reloads sees what
+ * they saw, and the page polls this one call while writing evaluation is still running (Section 5).
+ *
+ * A `409` means the assessment has not been submitted, and a `401` means the session is gone. Both
+ * are states the page acts on rather than messages it renders — see `ReportPage`.
+ */
+export async function getReport(): Promise<StudentReport> {
+  return requestJson<StudentReport>('/api/student/report');
 }

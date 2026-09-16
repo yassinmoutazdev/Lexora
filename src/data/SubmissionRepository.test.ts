@@ -180,6 +180,164 @@ describe.skipIf(!hasTestDatabase())('SubmissionRepository (integration)', () => 
     });
   });
 
+  describe('the one-submission-per-identity constraint (T5.2.3)', () => {
+    /**
+     * Inserts a submission with raw SQL, bypassing Prisma's model layer entirely.
+     *
+     * This is the whole point of the test. `prisma.submission.create` would prove that *Prisma*
+     * rejects the second row — which is not the guarantee. Section 6 asks for the guarantee that
+     * survives a race: "Postgres rejects a second `INSERT` even under a race condition, which is the
+     * guarantee application code alone cannot provide." Only a statement that goes straight to the
+     * database can show where the rejection actually comes from.
+     *
+     * Every value is a bind parameter, as everywhere else raw SQL appears in this codebase.
+     */
+    async function insertRawSubmission(input: {
+      cohortId: string;
+      rollNumberRaw: string;
+      rollNumberNormalized: string;
+      studentName?: string;
+    }): Promise<void> {
+      await prisma().$executeRawUnsafe(
+        `INSERT INTO "Submission"
+           ("id","cohortId","rollNumberRaw","rollNumberNormalized","studentName","status","contentVersion","answers","createdAt","updatedAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, 'draft', 'v1', '{}'::jsonb, now(), now())`,
+        input.cohortId,
+        input.rollNumberRaw,
+        input.rollNumberNormalized,
+        input.studentName ?? 'Raw Insert Student',
+      );
+    }
+
+    /** The Postgres SQLSTATE a rejection carries, whatever Prisma wraps it in. */
+    function sqlStateOf(error: unknown): unknown {
+      return (error as { meta?: { code?: unknown } }).meta?.code;
+    }
+
+    it('is rejected by Postgres itself when a duplicate (cohortId, rollNumberNormalized) is inserted', async () => {
+      const cohort = await createCohort();
+      await createSubmission(cohort.id, {
+        rollNumberRaw: 'BSCS-01',
+        rollNumberNormalized: 'bscs-01',
+      });
+
+      let thrown: unknown;
+      try {
+        await insertRawSubmission({
+          cohortId: cohort.id,
+          rollNumberRaw: 'BSCS-01',
+          rollNumberNormalized: 'bscs-01',
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeDefined();
+
+      // 23505 is Postgres' own `unique_violation`. Its presence is the assertion that matters: the
+      // statement never reached application code, so nothing but the database could have refused it.
+      expect(sqlStateOf(thrown)).toBe('23505');
+
+      // And the refusal names this constraint, not some other one that happens to be nearby.
+      const message = JSON.stringify((thrown as { meta?: unknown }).meta);
+      expect(message).toContain('cohortId');
+      expect(message).toContain('rollNumberNormalized');
+
+      // The rejected row is not half-written.
+      expect(await prisma().submission.count()).toBe(1);
+    });
+
+    it('keys on the normalized value, so differing raw spellings still collide', async () => {
+      // The constraint is on `rollNumberNormalized`, which is what makes "2021-001" and " 2021-001 "
+      // one identity rather than two (Section 6). A constraint on the raw column would let the same
+      // student start a second attempt by adding a space.
+      const cohort = await createCohort();
+      await createSubmission(cohort.id, {
+        rollNumberRaw: '2021-001',
+        rollNumberNormalized: '2021-001',
+      });
+
+      let thrown: unknown;
+      try {
+        await insertRawSubmission({
+          cohortId: cohort.id,
+          rollNumberRaw: '  2021-001  ',
+          rollNumberNormalized: '2021-001',
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(sqlStateOf(thrown)).toBe('23505');
+      expect(await prisma().submission.count()).toBe(1);
+    });
+
+    it('still allows the same roll number in a different cohort', async () => {
+      // The constraint is composite, not a global ban on roll numbers: identity is scoped to a
+      // cohort (FR-STU-005), so the same student in two intakes is two submissions by design.
+      const autumn = await createCohort({ name: 'Autumn intake' });
+      const spring = await createCohort({ name: 'Spring intake' });
+
+      await insertRawSubmission({
+        cohortId: autumn.id,
+        rollNumberRaw: 'BSCS-01',
+        rollNumberNormalized: 'bscs-01',
+      });
+      await insertRawSubmission({
+        cohortId: spring.id,
+        rollNumberRaw: 'BSCS-01',
+        rollNumberNormalized: 'bscs-01',
+      });
+
+      expect(await prisma().submission.count()).toBe(2);
+    });
+
+    it('surfaces to Prisma as the unique-constraint error createDraftIfAbsent recovers from', async () => {
+      // The link between the constraint and the code that leans on it. `createDraftIfAbsent` catches
+      // a unique violation to turn a raced first visit into a find-or-create; if the client ever
+      // stopped reporting this as P2002, that recovery would silently stop running and two
+      // simultaneous first visits would 500.
+      const cohort = await createCohort();
+      const input = {
+        cohortId: cohort.id,
+        rollNumberRaw: 'BSCS-01',
+        rollNumberNormalized: 'bscs-01',
+        studentName: 'Ayesha Khan',
+        contentVersion: 'v1',
+      };
+
+      await repository.createDraft(input);
+
+      await expect(repository.createDraft(input)).rejects.toMatchObject({ code: 'P2002' });
+
+      // And the method built on that error returns the existing row instead of raising.
+      const orCreate = await repository.createDraftIfAbsent(input);
+      expect(await prisma().submission.count()).toBe(1);
+      expect(
+        (await repository.findByCohortAndRollNumber(cohort.id, 'bscs-01'))?.id,
+      ).toBe(orCreate.id);
+    });
+
+    it('cannot be defeated by two inserts racing', async () => {
+      // The race the application-level check loses: both statements are in flight before either is
+      // awaited. One succeeds, one is refused by the database — never two rows.
+      const cohort = await createCohort();
+      const input = {
+        cohortId: cohort.id,
+        rollNumberRaw: 'BSCS-01',
+        rollNumberNormalized: 'bscs-01',
+      };
+
+      const outcomes = await Promise.allSettled([
+        insertRawSubmission(input),
+        insertRawSubmission(input),
+      ]);
+
+      expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
+      expect(await prisma().submission.count()).toBe(1);
+    });
+  });
+
   it('leaves no residual data between tests', async () => {
     // Runs last on purpose. The tests above each created a cohort and a submission; if the
     // harness's per-test truncation did not run, those rows would still be here. An empty

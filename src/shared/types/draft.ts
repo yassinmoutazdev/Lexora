@@ -5,6 +5,9 @@ import type {
   StudentProblemsFile,
   WritingPromptFile,
 } from '../../content/contentSchemas.ts';
+// The section vocabulary lives in a zod-free sibling so that a frontend importing `SECTION_KEYS`
+// does not drag this module's validator into the browser bundle — see `sections.ts`.
+import type { ProcessingStatus, SectionKey, SubmissionStatus } from './sections.ts';
 
 /**
  * The content *types* (`Question`, `ReadingFile`, and the rest) are re-exported, so that the
@@ -35,30 +38,12 @@ export type * from '../../content/contentSchemas.ts';
  * It is **not** where answers are scored. The schemas below check the *shape* of what arrives, not
  * its correctness: whether `'b'` is the right answer to a question is decided against content, at
  * scoring time (E5), by the service that owns that rule (Section 7).
- */
-
-/**
- * The five sections, in the order the assessment presents them (PRD Section 10).
  *
- * Declared once as a value and derived into a type, rather than written twice, because this list is
- * load-bearing in three places that must agree: the autosave request's section key is a *closed
- * set* (Section 12 — an open one would let a caller write arbitrary top-level keys into the JSONB
- * `answers` column), the assessment UI's navigation order, and the section keys the draft response
- * may carry.
- */
-export const SECTION_KEYS = ['grammar', 'vocabulary', 'reading', 'writing', 'studentProblems'] as const;
-
-/** A section of the assessment — the unit of both autosave and navigation. */
-export type SectionKey = (typeof SECTION_KEYS)[number];
-
-/**
- * The submission's lifecycle state, as far as a student can observe it.
+ * ## This module is imported type-only by the frontend
  *
- * Declared here rather than imported from `@prisma/client` so the frontend can name it without
- * depending on the generated database client. The two are the same union, which is what lets the
- * server assign a `SubmissionStatus` straight into this field.
+ * It imports `zod`, so a *value* import from here puts the validator in the browser bundle. The
+ * section vocabulary the SPA needs at runtime lives in `sections.ts`, which has no dependencies.
  */
-export type SubmissionStatus = 'draft' | 'submitted';
 
 /**
  * Grammar, Vocabulary, and Reading: the question id answered, and the option id chosen.
@@ -164,6 +149,108 @@ export type StudentDraft = {
   contentVersion: string;
   content: AssessmentContent;
   answers: DraftAnswers;
+};
+
+/**
+ * The body of `POST /api/student/submit` and `GET /api/student/report` (ARCHITECTURE Section 10).
+ *
+ * One type for both, because they answer with the same thing: Section 3 ends the submit flow at
+ * "Response: submission report", and Section 7 states plainly that there is no separate report
+ * artifact — the endpoint reads the submission row and shapes it. Two types here would be two
+ * descriptions of one response, which is how a page and its endpoint come to disagree.
+ *
+ * There is no `status` field, because a report exists only for a submission that has one: an
+ * unsubmitted assessment has no results, and PRD Section 13 lists a draft as "not a 'result'
+ * state". Reaching the report route with a draft is refused rather than answered with an empty
+ * report, so the state a `status` field would carry is already settled by the response being a
+ * response at all.
+ *
+ * ## Deterministic results are recomputed, not read back
+ *
+ * `deterministic` is scored from `answers` against the frozen `contentVersion` at the moment the
+ * report is built — not read from the `grammarScore`/`vocabularyScore`/`readingScore` columns.
+ * Scoring is a pure function of (answers, content), so the two agree by construction; the
+ * recomputation is what makes the per-question explanations (FR-DET-004) available at all, since
+ * those live in content and are not stored on the row. The columns remain the record for the staff
+ * aggregate queries that must not re-read content (E8).
+ *
+ * `writingStatus`/`problemsTextStatus` *are* read from the row — they are background state, not a
+ * function of anything the report can compute, and they are what lets the page say "still being
+ * prepared" (FR-FEEDBACK-004) instead of implying the report is complete (FR-FEEDBACK-008).
+ */
+export type StudentReport = {
+  contentVersion: string;
+  /** ISO 8601, or null while the submission is still a draft. */
+  submittedAt: string | null;
+  /**
+   * Grammar, Vocabulary, and Reading — immediate, and independent of any AI call (FR-FEEDBACK-001).
+   *
+   * Keyed by section, as everywhere else in this module. The three keys are
+   * `DETERMINISTIC_SECTION_KEYS`, which is the runtime list a page iterates.
+   */
+  deterministic: {
+    grammar: ReportSection;
+    vocabulary: ReportSection;
+    reading: ReportSection;
+  };
+  /** Where the Writing evaluation has got to (FR-FEEDBACK-002/004/007). */
+  writingStatus: ProcessingStatus;
+  /**
+   * Where the Student Problems text processing has got to; `not_applicable` when no text was given.
+   *
+   * Sent because the report describes the submission, not because the student reads it: FR-PROB-007
+   * puts the Learning Difficulties view out of MVP scope, and staff see this data through the
+   * dashboard instead (E8).
+   */
+  problemsTextStatus: ProcessingStatus;
+};
+
+/**
+ * One section of the report: its score, and every question in it.
+ *
+ * ## Why this is not the scorer's `SectionScore`
+ *
+ * `DeterministicScoringService` answers "what did this score". A report answers "what should the
+ * student read", and that needs the question's own text and the chosen option's text — neither of
+ * which scoring has any use for, and both of which live in the content bundle. The route joins the
+ * two, which is exactly Section 7's "the endpoint simply reads the Submission row and shapes it
+ * into a response"; putting display fields on the scorer's output instead would make every caller
+ * of scoring carry content it does not read.
+ *
+ * `title` is the content's own section title, so a heading can never name a section differently
+ * from the section it belongs to.
+ */
+export type ReportSection = {
+  title: string;
+  score: number;
+  maxScore: number;
+  questions: ReportQuestion[];
+};
+
+/**
+ * One question as the report shows it (FR-DET-004).
+ *
+ * Every question in the section appears, answered or not: an explanation is what a student who
+ * skipped a question most needs, and the section's `score` out of `maxScore` is only meaningful
+ * beside the questions it was computed from.
+ *
+ * The answer texts are carried alongside the ids rather than instead of them because the two say
+ * different things. An id that matches no option — which the autosave schema permits — has no text,
+ * and the report has to be able to say what was actually stored rather than print nothing.
+ */
+export type ReportQuestion = {
+  questionId: string;
+  prompt: string;
+  /** The option id the student chose, or null when they did not answer. */
+  givenAnswer: string | null;
+  /** That option's text, or null when there is no answer or it names no option. */
+  givenAnswerText: string | null;
+  correctAnswer: string;
+  /** The answer key's option text; null only if the content were internally inconsistent. */
+  correctAnswerText: string | null;
+  correct: boolean;
+  /** FR-DET-002's prewritten explanation — written once per question, never generated. */
+  explanation: string;
 };
 
 /**
