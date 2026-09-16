@@ -88,6 +88,15 @@ function sweepExpired(windows: Map<string, Window>, now: number): void {
 }
 
 /**
+ * Every counter this module has built, so a test can clear them (see `resetRateLimits`).
+ *
+ * Populated by `rateLimit()` below. In the application that is two entries, created once at module
+ * load for the two production endpoints; the extra entries only ever come from tests that build
+ * their own limiter.
+ */
+const counters: Map<string, Window>[] = [];
+
+/**
  * Builds a limiter with its own counter.
  *
  * Each call gets its own `Map`, so two endpoints sharing a policy still keep separate budgets — a
@@ -95,6 +104,7 @@ function sweepExpired(windows: Map<string, Window>, now: number): void {
  */
 export function rateLimit(options: RateLimitOptions): RequestHandler {
   const windows = new Map<string, Window>();
+  counters.push(windows);
 
   return function rateLimitMiddleware(req, res, next) {
     const now = Date.now();
@@ -119,6 +129,32 @@ export function rateLimit(options: RateLimitOptions): RequestHandler {
 
     next();
   };
+}
+
+/**
+ * Forgets every request counted so far, so each test starts with a full budget.
+ *
+ * ## Why this exists
+ *
+ * The counters are per-process and module-level, which is the production design: one instance, one
+ * allowance per address (Section 13's "simple in-memory counter" — no external rate-limiting
+ * service at this traffic volume). The consequence is that a *test file* shares one budget across
+ * every test in it, because a test file is one process and one module graph. A file that verifies
+ * an identity more than the limit allows — which is easy to reach, since each integration test
+ * builds its own rows and therefore its own session — starts failing with 429s that have nothing to
+ * do with what it is asserting. That is a false failure, and it reads like an authentication bug.
+ *
+ * Clearing between tests is the same principle as truncating the database between tests: each test
+ * begins from a known state. It hides nothing, because the limiter's own behaviour is proven
+ * elsewhere against limits small enough to exhaust deliberately
+ * (`src/api/middleware/rateLimit.test.ts`, `src/api/rateLimit.routes.test.ts`) — and this function
+ * does not raise a limit, shorten a window, or make the middleware skippable. It is not reachable
+ * over HTTP and is called from exactly one place: the test fixture.
+ *
+ * Exported for tests to read, like the two limits above.
+ */
+export function resetRateLimits(): void {
+  for (const windows of counters) windows.clear();
 }
 
 /** Applied to `POST /api/session/student-verify`. */

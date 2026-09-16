@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach } from 'vitest';
 import type { Cohort, StaffUser, Submission } from '@prisma/client';
+import { resetRateLimits } from '../api/middleware/rateLimit.ts';
 import { disconnectPrismaClient, getPrismaClient } from '../data/prismaClient.ts';
 import { resetDatabase } from './db.ts';
 
@@ -23,15 +24,31 @@ export function prisma() {
 }
 
 /**
- * Truncates every table and closes the pool when the file finishes.
+ * Truncates every table, resets the rate limiters, and closes the pool when the file finishes.
  *
  * Call once at the top level of an integration test file. Truncation runs before each test rather
  * than after, so a failing test leaves its rows in place to inspect and the suite still leaves no
  * residual data behind for the next file.
+ *
+ * ## Why the rate limiters are reset here too
+ *
+ * The name says "database", but what this fixture actually provides is *a known starting state*,
+ * and in this application that state is not only the database: the rate limiters keep their counters
+ * in process memory (`src/api/middleware/rateLimit.ts`), so every test in a file draws on the same
+ * allowance for `POST /api/session/student-verify`. Each integration test builds its own rows and
+ * therefore its own verified session, so a file grows past that allowance simply by covering more
+ * behaviour — and then fails with 429s that look like an authentication problem rather than the
+ * test-isolation problem they are.
+ *
+ * Resetting restores it to the same footing as the tables. It is deliberately not opt-in: a fixture
+ * a caller has to remember to use alongside this one is one a caller will forget, and this file's
+ * own experience is that the failure it prevents is confusing enough to be worth preventing
+ * unconditionally.
  */
 export function useCleanTestDatabase(): void {
   beforeEach(async () => {
     await resetDatabase(getPrismaClient());
+    resetRateLimits();
   });
 
   afterAll(async () => {
@@ -81,6 +98,10 @@ export type SubmissionOverrides = Partial<
     | 'status'
     | 'contentVersion'
     | 'answers'
+    // Set by finalization, not by a student. Here because a test that starts from a *submitted* row
+    // has to be able to state what the student wrote, and the original is a column of its own
+    // (Section 6) rather than a field inside `answers`.
+    | 'problemsOpenTextOriginal'
   >
 >;
 
@@ -107,6 +128,7 @@ export async function createSubmission(
       // the content bundle, or a content change would break unrelated integration tests.
       contentVersion: overrides.contentVersion ?? 'v1',
       answers: overrides.answers ?? {},
+      problemsOpenTextOriginal: overrides.problemsOpenTextOriginal ?? null,
     },
   });
 }

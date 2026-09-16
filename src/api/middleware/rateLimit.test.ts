@@ -2,7 +2,7 @@ import express from 'express';
 import type { Express } from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { rateLimit } from './rateLimit.ts';
+import { rateLimit, resetRateLimits } from './rateLimit.ts';
 
 /**
  * Tests for the rate-limiting middleware (T3.3.3).
@@ -77,6 +77,55 @@ describe('rateLimit — the window', () => {
     await new Promise((resolve) => setTimeout(resolve, 250));
 
     await request(app).get('/limited').expect(200);
+  });
+});
+
+describe('rateLimit — resetRateLimits', () => {
+  it('gives a limiter its full budget back', async () => {
+    // The whole point of the reset: a test file shares one allowance per limiter, so without this a
+    // file that verifies identities more often than the limit allows fails with 429s that have
+    // nothing to do with what it asserts. This proves the reset is real and not a no-op.
+    const app = createApp({ limit: 1, windowMs: 60_000 });
+
+    await request(app).get('/limited').expect(200);
+    await request(app).get('/limited').expect(429);
+
+    resetRateLimits();
+
+    await request(app).get('/limited').expect(200);
+  });
+
+  it('resets every limiter, not only the most recent one', async () => {
+    // The reason the module keeps a registry rather than one counter: the two production endpoints
+    // have separate budgets, and a reset that reached only one of them would leave the other's
+    // allowance spent across the whole file — the exact failure this exists to prevent.
+    const app = express();
+    app.use('/first', rateLimit({ limit: 1, windowMs: 60_000 }));
+    app.use('/second', rateLimit({ limit: 1, windowMs: 60_000 }));
+    app.get('/first', (_req, res) => res.json({ ok: true }));
+    app.get('/second', (_req, res) => res.json({ ok: true }));
+
+    await request(app).get('/first').expect(200);
+    await request(app).get('/first').expect(429);
+    await request(app).get('/second').expect(200);
+    await request(app).get('/second').expect(429);
+
+    resetRateLimits();
+
+    await request(app).get('/first').expect(200);
+    await request(app).get('/second').expect(200);
+  });
+
+  it('does not weaken the limit it resets', async () => {
+    // A reset clears the count; it does not raise the ceiling. The limiter must refuse the request
+    // after `limit` again, or this would be a way to disable it rather than to isolate tests.
+    const app = createApp({ limit: 1, windowMs: 60_000 });
+
+    resetRateLimits();
+
+    await request(app).get('/limited').expect(200);
+    await request(app).get('/limited').expect(429);
+    await request(app).get('/limited').expect(429);
   });
 });
 

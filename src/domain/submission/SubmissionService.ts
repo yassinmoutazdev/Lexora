@@ -6,6 +6,10 @@ import {
   type SubmissionTx,
 } from '../../data/SubmissionRepository.ts';
 import type { ChoiceAnswers, DraftAnswers } from '../../shared/types/draft.ts';
+// The job vocabulary lives in the job domain's own module, not here: this service is one of the
+// three modules that must agree on those strings, and a shared vocabulary does not belong inside
+// one of its speakers. See `src/domain/jobs/jobTypes.ts`.
+import { JOB_TYPES } from '../jobs/jobTypes.ts';
 import { SECTION_KEYS, type SectionKey } from '../../shared/types/sections.ts';
 import {
   scoreDeterministicSections,
@@ -72,21 +76,6 @@ export type FinalizeResult =
   | { outcome: 'already_submitted'; submission: Submission }
   | { outcome: 'incomplete'; incompleteSections: SectionKey[] }
   | { outcome: 'not_found' };
-
-/**
- * The processing job types this system enqueues (ARCHITECTURE Section 6, Section 8).
- *
- * Declared as a value and derived into a type, so the strings exist once. E6's `JobService` and the
- * worker loop must import these rather than re-spelling `'writing_eval'` — a second occurrence of
- * either literal is a job the worker would look for under a name nothing writes.
- */
-export const JOB_TYPES = {
-  writingEvaluation: 'writing_eval',
-  studentProblemsText: 'student_problems_text',
-} as const;
-
-/** One of the job types above. */
-export type JobType = (typeof JOB_TYPES)[keyof typeof JOB_TYPES];
 
 export type SubmissionDeps = {
   submissions: SubmissionRepository;

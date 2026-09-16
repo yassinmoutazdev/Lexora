@@ -85,6 +85,27 @@ describe('deterministicSectionFileSchema', () => {
     expect(firstIssue(result)).toContain('points');
   });
 
+  it('rejects fractional points, which the integer score columns could not store', () => {
+    // A question worth half a mark would load cleanly and then fail at submission, when the score
+    // is written to an `Int` column. Catching it here means it never reaches a student.
+    const file = cloneJson('grammar-questions.json');
+    file.questions[0].points = 0.5;
+
+    const result = deterministicSectionFileSchema.safeParse(file);
+
+    expect(result.success).toBe(false);
+    expect(firstIssue(result)).toContain('points');
+  });
+
+  it('accepts whole-number points, including values above one', () => {
+    // The rule is "integral", not "exactly 1" — a section may weight one question more heavily
+    // than another, and that is scoring information the content is allowed to carry.
+    const file = cloneJson('grammar-questions.json');
+    file.questions[0].points = 3;
+
+    expect(deterministicSectionFileSchema.safeParse(file).success).toBe(true);
+  });
+
   it('rejects an unknown metadata key rather than silently ignoring it', () => {
     const file = cloneJson('grammar-questions.json');
     file.questions[0].difficuly = 'basic'; // typo for `difficulty`

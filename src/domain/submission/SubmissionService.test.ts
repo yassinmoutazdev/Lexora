@@ -7,7 +7,8 @@ import { ContentLoader, type ContentBundle } from '../../content/ContentLoader.t
 import { submissionRepository } from '../../data/SubmissionRepository.ts';
 import type { DraftAnswers } from '../../shared/types/draft.ts';
 import { createCohort, createSubmission, prisma, useCleanTestDatabase } from '../../test/fixtures.ts';
-import { JOB_TYPES, SubmissionService } from './SubmissionService.ts';
+import { JOB_TYPES } from '../jobs/jobTypes.ts';
+import { SubmissionService } from './SubmissionService.ts';
 
 /**
  * Integration coverage for `SubmissionService.finalize()` (T5.2.1, ARCHITECTURE Section 15 —

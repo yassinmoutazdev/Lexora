@@ -447,36 +447,44 @@ Each Epic is one session. The following applies to every Epic and is not repeate
 
 ### Feature 6.1 — AI Abstraction Boundary
 
-- [ ] T6.1.1 — Define `src/ai/AIEvaluationService.ts` (interface: `evaluateWriting(text, rubricInstructions)`, `processStudentProblemsText(text)`) and `src/ai/errors.ts` (`AIValidationError`, `AIRetryableError`, `AINonRetryableError`).
+- [x] T6.1.1 — Define `src/ai/AIEvaluationService.ts` (interface: `evaluateWriting(text, rubricInstructions)`, `processStudentProblemsText(text)`) and `src/ai/errors.ts` (`AIValidationError`, `AIRetryableError`, `AINonRetryableError`).
       Ref: ARCHITECTURE Section 4 (src/ai/), Section 18
       Output: src/ai/AIEvaluationService.ts, src/ai/errors.ts
-- [ ] T6.1.2 — Implement `src/ai/schemas.ts`: zod schemas for the expected LLM JSON output (criterion-level writing scores, Student Problems categories).
+- [x] T6.1.2 — Implement `src/ai/schemas.ts`: zod schemas for the expected LLM JSON output (criterion-level writing scores, Student Problems categories).
       Ref: PRD Section 9.4 (FR-WRITE-005/007), Section 9.5 (FR-PROB-011); ARCHITECTURE Section 2 (zod), Section 3 (schema validation step)
       Output: src/ai/schemas.ts · unit test: a well-formed fixture passes; a missing field, wrong type, or out-of-range score fails
-- [ ] T6.1.3 — Implement a `FakeAIEvaluationService` test double implementing `AIEvaluationService`, used throughout the test suite so CI never depends on Ollama Cloud reachability.
+- [x] T6.1.3 — Implement a `FakeAIEvaluationService` test double implementing `AIEvaluationService`, used throughout the test suite so CI never depends on Ollama Cloud reachability.
       Ref: ARCHITECTURE Section 15 (Mocking Ollama)
       Output: test fixture/fake provider · reused across job, worker, and end-to-end tests
 
 ### Feature 6.2 — Job Persistence & Lifecycle
 
-- [ ] T6.2.1 — Implement `src/data/ProcessingJobRepository.ts` including the claim query (`UPDATE ... WHERE id = (SELECT ... FOR UPDATE SKIP LOCKED)`).
+- [x] T6.2.1 — Implement `src/data/ProcessingJobRepository.ts` including the claim query (`UPDATE ... WHERE id = (SELECT ... FOR UPDATE SKIP LOCKED)`).
       Ref: ARCHITECTURE Section 8 (Claiming), Section 6 (ProcessingJob model, index)
       Output: src/data/ProcessingJobRepository.ts · integration test: simulated concurrent claim attempts never claim the same row twice
-- [ ] T6.2.2 — Implement `src/domain/jobs/JobService.ts`: `claimNextJob` (with stale-job reclamation via `STALE_THRESHOLD_MS`), `completeJob` (transactional result write + job status), `failJob` (retry/backoff bookkeeping, `MAX_ATTEMPTS` → `failed_needs_review`).
+      **Proven by removing the mechanism, not by the test merely passing.** With `FOR UPDATE SKIP LOCKED` deleted outright, 8 concurrent claims over 8 jobs returned as few as 4 distinct jobs (work silently unclaimed) and 8 claims over 1 job returned that same job 4 times (a genuine double-claim) — failing on every run. `SKIP LOCKED` alone removed (keeping `FOR UPDATE`) blocks the claim instead, which the deterministic test catches 3/3: it holds the row lock in a second transaction and asserts the claim answers null without waiting. Timing was measured first, because which of the statistical tests catches the missing clause varies run to run; only the lock-holding test fails reliably, so that is the one the guarantee rests on.
+      The claim deliberately does **not** increment `attemptCount` — Section 8 puts that in the failure path, and counting both would double every ordinary failure, making `MAX_ATTEMPTS` mean half what it says.
+- [x] T6.2.2 — Implement `src/domain/jobs/JobService.ts`: `claimNextJob` (with stale-job reclamation via `STALE_THRESHOLD_MS`), `completeJob` (transactional result write + job status), `failJob` (retry/backoff bookkeeping, `MAX_ATTEMPTS` → `failed_needs_review`).
+      **`JOB_TYPES` was MOVED, not copied**, from `src/domain/submission/SubmissionService.ts` to `src/domain/jobs/jobTypes.ts` (with `isJobType`), as E5's comment invited. The alternative was JobService and the worker loop importing the submission *service* — and through it the content loader and scoring engine — to obtain two string literals. Same reasoning as `src/shared/types/sections.ts`. `SubmissionService` and its test now import from the new home; no re-export was left behind.
+      `completeJob` deliberately leaves `writingOverallScore` null (the calculator is T7.1.1, called from here by T7.3.1), so **E7 has less to add than its task text implies**: the criteria scores, the feedback, and the Student Problems derived write already happen here, for both job types. T7.3.1 adds the score calculation; T7.4.1's derived-column write already exists.
+      Retry policy is a parameter (`maxAttempts` + a `backoffMs` schedule), so no test waits on a clock. Section 8's "a schema-validation failure is retryable **once**" is implemented as a two-attempt budget for `AIValidationError` specifically.
       Ref: PRD Section 9.4 (FR-WRITE-011), Section 9.5 (FR-PROB-013); ARCHITECTURE Section 8 (Retries and backoff, Stale jobs), Section 6 (Transaction boundaries #4), Section 18
       Output: src/domain/jobs/JobService.ts + test · integration test: retry/backoff transitions are correct; a stale job is re-claimed after the threshold; exhausted retries produce `failed_needs_review`; the original response is never touched on failure
-- [ ] T6.2.3 — Implement `SubmissionRepository.getEvaluationContext(submissionId, jobType)`: resolves authoritative response text + `contentVersion` from the `Submission` row only, never from `ProcessingJob` fields.
+- [x] T6.2.3 — Implement `SubmissionRepository.getEvaluationContext(submissionId, jobType)`: resolves authoritative response text + `contentVersion` from the `Submission` row only, never from `ProcessingJob` fields.
       Ref: ARCHITECTURE Section 8 (What a job contains vs. what the worker resolves), Section 18
       Output: src/data/SubmissionRepository.ts (getEvaluationContext) · unit+integration test: returns the correct shape for both job types; throws clearly if the expected field is missing (e.g. a `writing_eval` job for a submission with no writing answer)
 
 ### Feature 6.3 — Worker Loop
 
-- [ ] T6.3.1 — Implement `src/background/workerLoop.ts`: a `setInterval` poll tick (7s) with an `isRunning` guard against overlapping ticks; claims one job, resolves evaluation context and frozen content version, invokes `AIEvaluationService`, validates output, persists via `JobService`, and routes failures to `failJob`.
+- [x] T6.3.1 — Implement `src/background/workerLoop.ts`: a `setInterval` poll tick (7s) with an `isRunning` guard against overlapping ticks; claims one job, resolves evaluation context and frozen content version, invokes `AIEvaluationService`, validates output, persists via `JobService`, and routes failures to `failJob`.
+      **The `isRunning` guard was proven by removing it**: two ticks fired together then both reached the provider (2 calls, not 1) — the single-in-flight-request constraint Section 8 designs around. `tick()` also never rejects, which is a contract rather than caution: its caller is a `setInterval` callback, and a rejection there is an unhandled rejection that ends the process running the API. `POLL_INTERVAL_MS`/`STALE_THRESHOLD_MS`/`MAX_ATTEMPTS`/backoff are `WorkerLoopSettings` parameters defaulting to Section 8's illustrative values, so no test waits on a clock.
       Ref: ARCHITECTURE Section 8 (workerLoop illustrative code), Section 3 (Data Flow — Background Writing Evaluation)
       Output: src/background/workerLoop.ts · integration test (with `FakeAIEvaluationService`): a pending job is claimed, processed, and marked succeeded within a few poll ticks
-- [ ] T6.3.2 — Wire the worker loop into the `src/server.ts` boot sequence, started after the Express server per the documented startup order.
+- [x] T6.3.2 — Wire the worker loop into the `src/server.ts` boot sequence, started after the Express server per the documented startup order.
       Ref: ARCHITECTURE Section 16 (Startup behavior — steps 3–4)
       Output: src/server.ts · starting the app starts the HTTP server and the worker loop exactly once each
+      **There is no production AI provider in this build, so what a production boot does is a decision, not an omission.** `selectAIEvaluationService()` is the explicit injectable seam (Section 17's "selected via configuration") and returns `null`; on `null`, `server.ts` boots the API, does **not** start the loop, and logs why, naming T7.2.3. The rejected alternative — starting the loop against a provider that answers every call with an error — would write `failed_needs_review` onto real submissions, which claims *"processing failed, a human should look at this"* when the truth is *"processing was never attempted"*; the jobs correctly stay `pending` instead. **T7.2.3 is a one-line change to this function and nothing else.**
+      Verified live, both ways. Unpatched: `HTTP 200`, log reads `background worker loop was NOT started`. With the seam temporarily returning a fake (patched, run, reverted — not committed), the boot log showed `background worker started (polling every 7000ms, up to 3 attempts per job)` **exactly once** alongside a single `listening on …`, and a real submission driven over HTTP through `PILOT-2026` went `pending/pending → succeeded/pending (t+3.1s) → succeeded/succeeded (t+9.9s)` on the 7s poll — the first time `ReportPage`'s poll has had a status that can actually move. `writingOverallScore` was still `null` in the live row, confirming the E6 boundary holds outside the suite. Rows deleted from `lexora_dev` afterwards.
 
 ---
 

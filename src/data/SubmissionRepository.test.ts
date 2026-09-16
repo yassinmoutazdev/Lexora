@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { JOB_TYPES } from '../domain/jobs/jobTypes.ts';
 import { hasTestDatabase } from '../test/db.ts';
-import { createCohort, createSubmission, prisma, useCleanTestDatabase } from '../test/fixtures.ts';
+import {
+  createCohort,
+  createSubmission,
+  prisma,
+  useCleanTestDatabase,
+  type SubmissionOverrides,
+} from '../test/fixtures.ts';
 import { SubmissionRepository } from './SubmissionRepository.ts';
 
 /**
@@ -335,6 +342,124 @@ describe.skipIf(!hasTestDatabase())('SubmissionRepository (integration)', () => 
 
       expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
       expect(await prisma().submission.count()).toBe(1);
+    });
+  });
+
+  describe('getEvaluationContext', () => {
+    /**
+     * A submitted row carrying both a writing response and both Student Problems parts — the shape
+     * `finalize` produces, built directly here so each test can break exactly one thing.
+     */
+    async function aSubmittedRow(overrides: SubmissionOverrides = {}) {
+      const cohort = await createCohort();
+
+      return createSubmission(cohort.id, {
+        status: 'submitted',
+        contentVersion: 'v1',
+        answers: { writing: { essayText: 'Learning a language rewards patience.' } },
+        ...overrides,
+      });
+    }
+
+    it('resolves the writing response and the frozen content version', async () => {
+      // ARCHITECTURE Section 15: "Returns the correct response text and contentVersion for both job
+      // types". The version comes off the Submission row — never `getCurrentVersion()` — which is
+      // what makes the caller's next step resolve the rubric the student was actually graded under.
+      const submission = await aSubmittedRow({ contentVersion: 'v1' });
+
+      const context = await repository.getEvaluationContext(
+        submission.id,
+        JOB_TYPES.writingEvaluation,
+      );
+
+      expect(context).toEqual({
+        jobType: JOB_TYPES.writingEvaluation,
+        responseText: 'Learning a language rewards patience.',
+        contentVersion: 'v1',
+      });
+    });
+
+    it('resolves the Student Problems text from its own column', async () => {
+      // FR-PROB-009: the original is the record. It is a column of its own (Section 6), not a field
+      // inside `answers`, so this is the only place the worker can be handed it from.
+      const original = 'أجد صعوبة في التحدث أمام زملائي.';
+      const submission = await aSubmittedRow({ problemsOpenTextOriginal: original });
+
+      const context = await repository.getEvaluationContext(
+        submission.id,
+        JOB_TYPES.studentProblemsText,
+      );
+
+      expect(context.responseText).toBe(original);
+      expect(context.contentVersion).toBe('v1');
+    });
+
+    it('returns the text untrimmed, exactly as it was stored', async () => {
+      // FR-PROB-009 makes the original the record. Whitespace is checked to decide emptiness and
+      // then left alone — handing back a trimmed version would quietly alter what the student wrote
+      // before the model ever saw it.
+      const padded = '  I translate from Arabic in my head.  ';
+      const submission = await aSubmittedRow({ problemsOpenTextOriginal: padded });
+
+      const context = await repository.getEvaluationContext(
+        submission.id,
+        JOB_TYPES.studentProblemsText,
+      );
+
+      expect(context.responseText).toBe(padded);
+    });
+
+    it('throws rather than returning an empty string for a writing job with no writing answer', async () => {
+      // Section 15 names this case. An empty string would be sent to the model, which would return
+      // criterion judgments about a text that does not exist — a plausible-looking score, and no
+      // error anywhere. A refusal lands the job in `failed_needs_review` where staff can see it.
+      const submission = await createSubmission((await createCohort()).id, {
+        status: 'submitted',
+        answers: {},
+      });
+
+      await expect(
+        repository.getEvaluationContext(submission.id, JOB_TYPES.writingEvaluation),
+      ).rejects.toThrow(/no essay text/);
+    });
+
+    it('treats a whitespace-only writing answer as no answer', async () => {
+      // The same reading `SubmissionService.incompleteSections` takes: a check for "did they write
+      // something" must not be satisfied by spaces.
+      const submission = await aSubmittedRow({ answers: { writing: { essayText: '   \n  ' } } });
+
+      await expect(
+        repository.getEvaluationContext(submission.id, JOB_TYPES.writingEvaluation),
+      ).rejects.toThrow(/no essay text/);
+    });
+
+    it('throws for a Student Problems job on a submission with no open text', async () => {
+      // `finalize` records `not_applicable` and enqueues no job in this case, so reaching here means
+      // a row nothing in this system wrote.
+      const submission = await aSubmittedRow();
+
+      await expect(
+        repository.getEvaluationContext(submission.id, JOB_TYPES.studentProblemsText),
+      ).rejects.toThrow(/problemsOpenTextOriginal is empty/);
+    });
+
+    it('throws for a submission that does not exist', async () => {
+      await expect(
+        repository.getEvaluationContext(
+          '00000000-0000-0000-0000-000000000000',
+          JOB_TYPES.writingEvaluation,
+        ),
+      ).rejects.toThrow(/no submission with id/);
+    });
+
+    it('throws for a job type it does not recognize', async () => {
+      // The claim query can hand back any `jobType` string (Section 6 makes it a plain string
+      // column), so an unrecognized one has to be refused here rather than guessed at.
+      const submission = await aSubmittedRow();
+
+      await expect(
+        repository.getEvaluationContext(submission.id, 'not_a_job_type'),
+      ).rejects.toThrow(/unrecognized job type/);
     });
   });
 

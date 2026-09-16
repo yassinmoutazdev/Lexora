@@ -66,8 +66,22 @@ export const questionSchema = z
     /** FR-DET-002 — prewritten feedback shown per FR-DET-004, never generated at runtime. */
     explanation: z.string().min(1),
 
-    /** FR-DET-002 — scoring information. */
-    points: z.number().positive(),
+    /**
+     * FR-DET-002 — scoring information: how much this question is worth.
+     *
+     * Whole numbers only, and deliberately so. `Submission.grammarScore`/`vocabularyScore`/
+     * `readingScore` are `Int?` columns (Section 6), and a section's score is the sum of its
+     * questions' points — so a fractional value here would be a content file that validates at boot
+     * and then makes Prisma reject the write at *submission* time, which is the worst moment a
+     * configuration error can surface: in front of a student, on the one action that cannot be
+     * retried.
+     *
+     * `.int()` moves that failure to where the rest of this file's checks already put content
+     * mistakes — boot, before a broken file can reach anyone. If the team later wants partial
+     * credit, the column type and this rule change together in a deliberate migration rather than
+     * the two silently disagreeing.
+     */
+    points: z.number().positive().int(),
   })
   .strict()
   .superRefine((question, ctx) => {

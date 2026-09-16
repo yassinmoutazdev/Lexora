@@ -1,4 +1,5 @@
 import type { Prisma, ProcessingStatus, Submission, SubmissionStatus } from '@prisma/client';
+import { JOB_TYPES, isJobType, type JobType } from '../domain/jobs/jobTypes.ts';
 import { getPrismaClient } from './prismaClient.ts';
 
 /**
@@ -240,7 +241,209 @@ export class SubmissionRepository {
       data: jobTypes.map((jobType) => ({ submissionId, jobType })),
     });
   }
+
+  /**
+   * Writes a succeeded writing evaluation onto the submission (Section 3, Section 6 boundary #4).
+   *
+   * `writingOverallScore` is deliberately absent. FR-WRITE-006 and Section 7 reserve that number for
+   * `WritingScoreCalculator`, computed from these criterion scores and the versioned rubric weights,
+   * and E6 has no calculator yet (T7.1.1/T7.3.1) — so the honest thing to leave behind is nothing,
+   * rather than a number this layer invented. The column stays null, and `writingStatus` says why
+   * the report has no writing result to show.
+   *
+   * Called only inside the transaction that also marks the job succeeded, which is the whole point of
+   * boundary #4: the result and the record of having produced it are one fact.
+   */
+  async recordWritingEvaluation(
+    tx: SubmissionTx,
+    submissionId: string,
+    write: WritingEvaluationWrite,
+  ): Promise<void> {
+    await tx.submission.update({
+      where: { id: submissionId },
+      data: {
+        writingCriteriaScores: write.criteriaScores,
+        writingFeedback: write.feedback,
+        writingStatus: 'succeeded',
+      },
+    });
+  }
+
+  /**
+   * Writes a succeeded Student Problems analysis onto the submission (Section 12, Section 6).
+   *
+   * Writes `problemsTextDerived` and nothing else on the data side. `problemsOpenTextOriginal` is
+   * absent from this statement — not omitted by oversight, but because it is the one column the AI
+   * must never reach (FR-PROB-009/FR-PROB-013), and a write that cannot name it cannot overwrite it.
+   */
+  async recordStudentProblemsAnalysis(
+    tx: SubmissionTx,
+    submissionId: string,
+    derived: Prisma.InputJsonValue,
+  ): Promise<void> {
+    await tx.submission.update({
+      where: { id: submissionId },
+      data: { problemsTextDerived: derived, problemsTextStatus: 'succeeded' },
+    });
+  }
+
+  /**
+   * Records that a writing evaluation will not produce a result (FR-WRITE-011, EDGE-004).
+   *
+   * Only the status column. The student's response is in `answers.writing.essayText`, which this
+   * statement cannot reach — Section 12's "the original is preserved" is a property of the write
+   * being this narrow, not of a caller remembering not to touch it.
+   */
+  async markWritingEvaluationNeedsReview(tx: SubmissionTx, submissionId: string): Promise<void> {
+    await tx.submission.update({
+      where: { id: submissionId },
+      data: { writingStatus: 'failed_needs_review' },
+    });
+  }
+
+  /** The same for Student Problems processing (FR-PROB-013, EDGE-008), and equally narrow. */
+  async markProblemsTextNeedsReview(tx: SubmissionTx, submissionId: string): Promise<void> {
+    await tx.submission.update({
+      where: { id: submissionId },
+      data: { problemsTextStatus: 'failed_needs_review' },
+    });
+  }
+
+  /**
+   * Resolves everything a background job needs to run, from the Submission row and nothing else
+   * (ARCHITECTURE Section 8, Section 18 — canonical location for "resolving a submission's
+   * authoritative response text / content for background evaluation").
+   *
+   * ## Why the job table is not consulted
+   *
+   * Section 8 is explicit that a `ProcessingJob` row carries *"which submission and which kind of
+   * work — nothing more"*, and gives the reason: *"it means the job table can never hold a stale or
+   * divergent copy of the response text or rubric, and a submission's data has exactly one place it
+   * lives."* This method is that sentence made operational. It takes a submission id and a job type
+   * and reads one row; there is no field it could take from the job even if a caller offered one,
+   * because `processing_jobs` does not have one (Section 6).
+   *
+   * The `contentVersion` it returns is the one frozen on the submission at draft creation, never
+   * `getCurrentVersion()`. That is what makes Section 12's historical interpretability hold: a
+   * submission is evaluated against the rubric it was written for, and the caller's next step —
+   * `ContentLoader.getContent(context.contentVersion)` — throws rather than falling back if that
+   * version is missing.
+   *
+   * ## Why the missing-field cases throw instead of returning empty
+   *
+   * Both failures below are *unreachable through the normal flow* — `finalize` only enqueues a
+   * writing job after checking the response is non-blank, and only enqueues the Student Problems job
+   * when there was open text to process. So reaching either means a row that no code path in this
+   * system wrote, and the two answers available are "hand back an empty string" or "refuse". An
+   * empty string would be evaluated as a blank essay and *scored*: the model would return criterion
+   * judgments about a text that does not exist, the numbers would look entirely reasonable, and
+   * nothing anywhere would report a problem. A refusal is visible, and lands the job in
+   * `failed_needs_review` where staff can see it (FR-WRITE-011).
+   *
+   * The check is `trim().length === 0` and the value returned is **untrimmed**, for the reason
+   * `SubmissionService.readOpenText` gives: the original is the record (FR-PROB-009), and trimming
+   * it to test it and then handing back the trimmed version would quietly alter what the student
+   * wrote before it was ever sent to the model.
+   */
+  async getEvaluationContext(submissionId: string, jobType: string): Promise<EvaluationContext> {
+    if (!isJobType(jobType)) {
+      throw new Error(
+        `Cannot resolve an evaluation context for unrecognized job type ${JSON.stringify(jobType)}. ` +
+          `Known types: ${Object.values(JOB_TYPES).join(', ')}.`,
+      );
+    }
+
+    const submission = await this.findById(submissionId);
+
+    if (!submission) {
+      throw new Error(
+        `Cannot resolve an evaluation context: no submission with id ${submissionId}.`,
+      );
+    }
+
+    const responseText =
+      jobType === JOB_TYPES.writingEvaluation
+        ? writingResponseText(submission)
+        : studentProblemsResponseText(submission);
+
+    return { jobType, responseText, contentVersion: submission.contentVersion };
+  }
 }
+
+/**
+ * What a job needs, resolved fresh at claim time (ARCHITECTURE Section 8).
+ *
+ * One shape rather than a union on `jobType`: Section 8's sketch shows the two variants carrying
+ * identical fields, so a discriminated union here would discriminate nothing — the caller picks its
+ * evaluation by the job type it already holds, not by narrowing this. If a future job type needs
+ * input this one does not, that is the point at which a union earns its place.
+ */
+export type EvaluationContext = {
+  jobType: JobType;
+  /** The student's own words, exactly as stored. Never empty — see `getEvaluationContext`. */
+  responseText: string;
+  /** The version frozen at draft creation; the caller resolves content through it, never "current". */
+  contentVersion: string;
+};
+
+/** The writing response, from `answers.writing.essayText` (Section 8). */
+function writingResponseText(submission: Submission): string {
+  const writing = (submission.answers as DraftAnswersLike).writing;
+  const essayText = writing?.essayText;
+
+  if (typeof essayText !== 'string' || essayText.trim().length === 0) {
+    throw new Error(
+      `Cannot evaluate writing for submission ${submission.id}: it has no essay text. ` +
+        'A writing job is only enqueued for a response that was written, so this row is not one ' +
+        'any submission path produces.',
+    );
+  }
+
+  return essayText;
+}
+
+/** The Student Problems open text, from its own column — never from `answers` (Section 6). */
+function studentProblemsResponseText(submission: Submission): string {
+  const original = submission.problemsOpenTextOriginal;
+
+  if (typeof original !== 'string' || original.trim().length === 0) {
+    throw new Error(
+      `Cannot process Student Problems text for submission ${submission.id}: ` +
+        'problemsOpenTextOriginal is empty. A Student Problems job is only enqueued when open ' +
+        'text was given, so this row is not one any submission path produces.',
+    );
+  }
+
+  return original;
+}
+
+/**
+ * The part of `answers` this file reads.
+ *
+ * Declared structurally rather than imported from `src/shared/types/draft.ts`, because this module
+ * needs one field of one section and nothing else — importing the whole answer contract to name
+ * `writing.essayText` would make the data layer depend on the wire format of every section. The
+ * shape is asserted by the writers (`draftAutosaveBodySchema`), which is the same single fact
+ * `toDraftAnswers` relies on.
+ */
+type DraftAnswersLike = {
+  writing?: { essayText?: unknown };
+};
+
+/**
+ * The AI result columns a succeeded writing job writes (Section 6).
+ *
+ * Two JSON values rather than the boundary's `WritingEvaluation`, so this layer stores what it is
+ * handed without taking a dependency on the shape of the AI contract — the mapping from criterion
+ * judgments to `writingCriteriaScores` and feedback to `writingFeedback` is a domain decision and
+ * lives in `JobService`.
+ */
+export type WritingEvaluationWrite = {
+  /** Criterion key → `{ score, rationale }` (Section 6's `writingCriteriaScores`). */
+  criteriaScores: Prisma.InputJsonValue;
+  /** Strengths, weaknesses, corrections, and suggestions (Section 6's `writingFeedback`). */
+  feedback: Prisma.InputJsonValue;
+};
 
 /**
  * A handle for a transaction the caller owns.

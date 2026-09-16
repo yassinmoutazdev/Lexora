@@ -1,0 +1,555 @@
+import { describe, expect, it } from 'vitest';
+import type { ProcessingJob } from '@prisma/client';
+import {
+  AIRetryableError,
+  AINonRetryableError,
+  AIValidationError,
+} from '../../ai/errors.ts';
+import { defaultStudentProblemsAnalysis, defaultWritingEvaluation } from '../../test/fakeAIEvaluationService.ts';
+import { ContentLoader } from '../../content/ContentLoader.ts';
+import { REPO_ROOT } from '../../config/env.ts';
+import path from 'node:path';
+import { processingJobRepository } from '../../data/ProcessingJobRepository.ts';
+import { submissionRepository } from '../../data/SubmissionRepository.ts';
+import type { DraftAnswers } from '../../shared/types/draft.ts';
+import { createCohort, createSubmission, prisma, useCleanTestDatabase } from '../../test/fixtures.ts';
+import { SubmissionService } from '../submission/SubmissionService.ts';
+import { JOB_TYPES } from './jobTypes.ts';
+import { JobService, type RetryPolicy } from './JobService.ts';
+
+/**
+ * Integration coverage for the job lifecycle (T6.2.2, ARCHITECTURE Section 15 — "`JobService` | Unit
+ * + integration | Claim query never double-claims (simulated concurrent claim attempts); retry/backoff
+ * transitions; stale job re-claim after the threshold; exhausted-retries → `failed_needs_review`").
+ *
+ * Against the real test database, because every transition under test is a write, and the two
+ * properties this suite cares most about are properties of *statements*: that boundary #4's two
+ * writes are one transaction, and that no failure path names the column holding the student's own
+ * words. Both would be trivially satisfiable against a mock and meaningless there.
+ *
+ * The backoff is asserted by reading the `nextAttemptAt` that was written, never by waiting — the
+ * schedule is a parameter precisely so this file needs no clock.
+ */
+
+useCleanTestDatabase();
+
+const REAL_CONTENT = path.join(REPO_ROOT, 'content');
+
+/** Section 8's illustrative schedule, restated here so the test is about the mechanism, not the values. */
+const POLICY: RetryPolicy = { maxAttempts: 3, backoffMs: [5_000, 60_000, 300_000] };
+
+const MINUTE = 60_000;
+const STALE = 5 * MINUTE;
+
+function service(): JobService {
+  return new JobService({ jobs: processingJobRepository, submissions: submissionRepository });
+}
+
+/** Full, correct answers for the real v1 content — the shape `finalize` accepts. */
+function answersFrom(): DraftAnswers {
+  const content = new ContentLoader(REAL_CONTENT).getContent('v1');
+  const answerKey = (questions: { id: string; correctAnswer: string }[]) =>
+    Object.fromEntries(questions.map((question) => [question.id, question.correctAnswer]));
+
+  return {
+    grammar: answerKey(content.grammar.questions),
+    vocabulary: answerKey(content.vocabulary.questions),
+    reading: answerKey(content.reading.passages.flatMap((passage) => passage.questions)),
+    writing: { essayText: 'Learning a language is a long project, but it rewards patience.' },
+    studentProblems: {
+      likertAnswers: Object.fromEntries(content.studentProblems.statements.map((s) => [s.id, 4])),
+      openText: 'أجد صعوبة في التحدث أمام زملائي.',
+    },
+  };
+}
+
+/**
+ * A finalized submission with the two pending jobs `finalize` creates — the state the worker actually
+ * meets in production, rather than a hand-built approximation of it.
+ *
+ * `only` keeps a single job type and removes the other, for the tests that are about what happens to
+ * *one* job. Without it, "the failed job is not claimable" would be asked of a queue that also holds
+ * a perfectly claimable second job, and the honest answer would be that something was claimed.
+ */
+async function aFinalizedSubmission(options: { only?: string } = {}) {
+  const cohort = await createCohort();
+  const submission = await createSubmission(cohort.id, {
+    contentVersion: 'v1',
+    answers: answersFrom(),
+  });
+
+  await new SubmissionService({
+    submissions: submissionRepository,
+    content: new ContentLoader(REAL_CONTENT),
+  }).finalize(submission.id);
+
+  if (options.only) {
+    await prisma().processingJob.deleteMany({
+      where: { submissionId: submission.id, jobType: { not: options.only } },
+    });
+  }
+
+  const jobs = await prisma().processingJob.findMany({
+    where: { submissionId: submission.id },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return { submissionId: submission.id, jobs };
+}
+
+/** The one job of a given type for a submission. */
+function jobOfType(jobs: ProcessingJob[], jobType: string): ProcessingJob {
+  const job = jobs.find((candidate) => candidate.jobType === jobType);
+  if (!job) throw new Error(`no ${jobType} job was created`);
+  return job;
+}
+
+function readJob(id: string) {
+  return prisma().processingJob.findUniqueOrThrow({ where: { id } });
+}
+
+function readSubmission(id: string) {
+  return prisma().submission.findUniqueOrThrow({ where: { id } });
+}
+
+describe('JobService.claimNextJob', () => {
+  it('claims a job the finalize step enqueued', async () => {
+    // The seam between E5 and E6: `finalize` inserts `pending` rows with the schema's defaults and
+    // nothing else, and the worker claims one without anything having to prepare it first.
+    const { submissionId } = await aFinalizedSubmission();
+
+    const claimed = await service().claimNextJob({ staleThresholdMs: STALE });
+
+    expect(claimed).not.toBeNull();
+    expect(claimed?.submissionId).toBe(submissionId);
+    expect(claimed?.attemptCount).toBe(0);
+  });
+
+  it('returns null on an idle tick, which is the common case', async () => {
+    expect(await service().claimNextJob({ staleThresholdMs: STALE })).toBeNull();
+  });
+});
+
+describe('JobService.completeJob — a succeeded writing evaluation', () => {
+  it('stores the criterion judgments and feedback, and marks the job succeeded', async () => {
+    const { submissionId, jobs } = await aFinalizedSubmission();
+    const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
+    const evaluation = defaultWritingEvaluation();
+
+    const outcome = await service().completeJob(job.id, evaluation);
+
+    expect(outcome).toBe('completed');
+
+    const stored = await readSubmission(submissionId);
+    expect(stored.writingStatus).toBe('succeeded');
+    expect(stored.writingCriteriaScores).toEqual(evaluation.criteriaScores);
+    expect(stored.writingFeedback).toEqual({
+      strengths: evaluation.strengths,
+      weaknesses: evaluation.weaknesses,
+      corrections: evaluation.corrections,
+      suggestions: evaluation.suggestions,
+    });
+
+    const updated = await readJob(job.id);
+    expect(updated.status).toBe('succeeded');
+    expect(updated.completedAt).toBeInstanceOf(Date);
+  });
+
+  it('leaves the overall score for the calculator that does not exist yet', async () => {
+    // The E6 boundary, asserted so E7 cannot forget it and E6 cannot quietly overstep it. The
+    // overall 0-100 is a deterministic function of these criteria and the versioned rubric weights
+    // (FR-WRITE-006); `WritingScoreCalculator` is T7.1.1 and T7.3.1 is what calls it from here. Until
+    // then the column is null — not a number this layer invented.
+    const { submissionId, jobs } = await aFinalizedSubmission();
+
+    await service().completeJob(
+      jobOfType(jobs, JOB_TYPES.writingEvaluation).id,
+      defaultWritingEvaluation(),
+    );
+
+    expect((await readSubmission(submissionId)).writingOverallScore).toBeNull();
+  });
+
+  it('does not touch the Student Problems side of the submission', async () => {
+    // The two jobs fail independently (Section 6); they must also succeed independently, or a
+    // writing result would claim a Student Problems analysis that was never run.
+    const { submissionId, jobs } = await aFinalizedSubmission();
+    const before = await readSubmission(submissionId);
+
+    await service().completeJob(
+      jobOfType(jobs, JOB_TYPES.writingEvaluation).id,
+      defaultWritingEvaluation(),
+    );
+
+    const after = await readSubmission(submissionId);
+    expect(after.problemsTextStatus).toBe(before.problemsTextStatus);
+    expect(after.problemsTextDerived).toEqual(before.problemsTextDerived);
+    expect(after.problemsOpenTextOriginal).toBe(before.problemsOpenTextOriginal);
+  });
+
+  it('counts no attempt of its own', async () => {
+    // Attempts are counted when they fail (Section 8). A success that incremented would make the
+    // count mean "times touched" rather than "times it went wrong", and a job that succeeded on its
+    // third try would look identical to one that has just failed twice.
+    const { jobs } = await aFinalizedSubmission();
+    const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
+
+    await service().completeJob(job.id, defaultWritingEvaluation());
+
+    expect((await readJob(job.id)).attemptCount).toBe(0);
+  });
+
+  it('answers not_found for a job that does not exist', async () => {
+    const outcome = await service().completeJob(
+      '00000000-0000-0000-0000-000000000000',
+      defaultWritingEvaluation(),
+    );
+
+    expect(outcome).toBe('not_found');
+  });
+});
+
+describe('JobService.completeJob — a succeeded Student Problems analysis', () => {
+  it('writes the derived column and leaves the original exactly as submitted', async () => {
+    // FR-PROB-009/011 in one assertion pair. The derived column is where the AI's reading goes; the
+    // original is the record of what the student wrote, and the difference between "equal to the
+    // fixture" and "byte-identical to what finalize stored" is the difference between a test that
+    // checks a value and one that checks the column was not rewritten.
+    const { submissionId, jobs } = await aFinalizedSubmission();
+    const before = await readSubmission(submissionId);
+    const analysis = defaultStudentProblemsAnalysis();
+
+    await service().completeJob(
+      jobOfType(jobs, JOB_TYPES.studentProblemsText).id,
+      analysis,
+    );
+
+    const after = await readSubmission(submissionId);
+    expect(after.problemsTextStatus).toBe('succeeded');
+    expect(after.problemsTextDerived).toEqual({
+      normalizedText: analysis.normalizedText,
+      categories: analysis.categories,
+    });
+    expect(after.problemsOpenTextOriginal).toBe(before.problemsOpenTextOriginal);
+    expect(JSON.stringify(after.problemsOpenTextOriginal)).toBe(
+      JSON.stringify(before.problemsOpenTextOriginal),
+    );
+  });
+
+  it('does not touch the writing side of the submission', async () => {
+    const { submissionId, jobs } = await aFinalizedSubmission();
+    const before = await readSubmission(submissionId);
+
+    await service().completeJob(
+      jobOfType(jobs, JOB_TYPES.studentProblemsText).id,
+      defaultStudentProblemsAnalysis(),
+    );
+
+    const after = await readSubmission(submissionId);
+    expect(after.writingStatus).toBe(before.writingStatus);
+    expect(after.writingCriteriaScores).toEqual(before.writingCriteriaScores);
+    expect(after.writingFeedback).toEqual(before.writingFeedback);
+  });
+
+  it('refuses to store a result for a job type it does not recognize', async () => {
+    // Such a job is data this system cannot interpret. Guessing a branch would write one kind of
+    // result into the other kind's columns; doing nothing would leave the job `processing` until it
+    // looked stalled, forever. Thrown, it reaches the worker's failure handling and ends up visible.
+    const { submissionId } = await aFinalizedSubmission();
+    const rogue = await prisma().processingJob.create({
+      data: { submissionId, jobType: 'not_a_job_type' },
+    });
+
+    await expect(service().completeJob(rogue.id, defaultWritingEvaluation())).rejects.toThrow(
+      /not_a_job_type/,
+    );
+
+    expect((await readJob(rogue.id)).status).toBe('pending');
+  });
+});
+
+describe('JobService.completeJob — transaction boundary #4', () => {
+  it('writes no part of a result whose job row it could not mark', async () => {
+    // Section 6 boundary #4: the result write and the job transition are one transaction, "so a
+    // crash between 'wrote the score' and 'marked the job done' cannot happen". Provoked rather than
+    // argued: a result carrying a circular reference makes Prisma raise from the *first* statement
+    // of the pair (measured: `RangeError: Maximum call stack size exceeded`, from inside the
+    // transaction), so the second statement never runs.
+    //
+    // What is being asserted is that the pair is atomic in the direction that matters. The job was
+    // claimed and the transaction was entered, so a two-transaction implementation would have left
+    // the job marked succeeded — or the columns written — depending on the order. Neither is
+    // permitted: boundary #4 says there is no commit containing one without the other, and the two
+    // assertions below are the two halves of that.
+    const { submissionId, jobs } = await aFinalizedSubmission();
+    const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
+
+    // Claimed first, so the state the failure must not advance past is the real one a worker holds.
+    await service().claimNextJob({ staleThresholdMs: STALE });
+
+    const unserializable: WritingEvaluationWithCircularJson = defaultWritingEvaluation();
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    unserializable.criteriaScores.grammarAccuracy = {
+      score: 80,
+      rationale: 'Circular.',
+      ...circular,
+    };
+
+    await expect(service().completeJob(job.id, unserializable)).rejects.toThrow();
+
+    const stored = await readSubmission(submissionId);
+    expect(stored.writingStatus).toBe('pending');
+    expect(stored.writingCriteriaScores).toBeNull();
+    expect(stored.writingFeedback).toBeNull();
+    expect((await readJob(job.id)).status).toBe('processing');
+  });
+});
+
+/** A writing evaluation, widened so a test can put a value Prisma cannot serialize inside it. */
+type WritingEvaluationWithCircularJson = ReturnType<typeof defaultWritingEvaluation> & {
+  criteriaScores: Record<string, unknown>;
+};
+
+describe('JobService.failJob — retries and backoff', () => {
+  it('returns a retryable failure to the queue with the first delay in the schedule', async () => {
+    // Section 8: "retryable failures increment attemptCount and set nextAttemptAt = now() +
+    // backoff(attemptCount)". Asserted against the timestamp that was written, so the proof is about
+    // the mechanism and costs no wall-clock time.
+    const { jobs } = await aFinalizedSubmission();
+    const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
+    const before = Date.now();
+
+    const outcome = await service().failJob(job.id, new AIRetryableError('timed out'), POLICY);
+
+    expect(outcome).toBe('retry_scheduled');
+
+    const updated = await readJob(job.id);
+    expect(updated.status).toBe('pending');
+    expect(updated.attemptCount).toBe(1);
+    expect(updated.lastError).toBe('timed out');
+    // Cleared, because the row is no longer claimed — a timestamp here would say a worker holds a
+    // job the claim predicate now treats as free.
+    expect(updated.claimedAt).toBeNull();
+    expect(updated.completedAt).toBeNull();
+
+    const delay = updated.nextAttemptAt.getTime() - before;
+    expect(delay).toBeGreaterThanOrEqual(POLICY.backoffMs[0] ?? 0);
+    expect(delay).toBeLessThan((POLICY.backoffMs[0] ?? 0) + 2_000);
+  });
+
+  it('waits longer on the second failure than on the first', async () => {
+    // The schedule is indexed by attempt, not a fixed delay: a job that has failed twice is further
+    // from being retried than one that has failed once, which is the whole of "backoff".
+    const { jobs } = await aFinalizedSubmission();
+    const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
+
+    await service().failJob(job.id, new AIRetryableError('timed out'), POLICY);
+    const first = await readJob(job.id);
+
+    await service().failJob(job.id, new AIRetryableError('timed out'), POLICY);
+    const second = await readJob(job.id);
+
+    expect(second.attemptCount).toBe(2);
+    expect(second.nextAttemptAt.getTime() - first.nextAttemptAt.getTime()).toBeGreaterThan(
+      (POLICY.backoffMs[1] ?? 0) - (POLICY.backoffMs[0] ?? 0) - 2_000,
+    );
+  });
+
+  it('keeps the submission claimable while a retry is pending', async () => {
+    // FR-FEEDBACK-007 forbids leaving the student on an indefinite "in progress", and a retry is not
+    // that state — the work is still going to happen. Moving the submission to `processing` here
+    // would also stop the report page polling (Section 5), so it stays `pending` until the job
+    // actually ends.
+    const { submissionId, jobs } = await aFinalizedSubmission();
+
+    await service().failJob(
+      jobOfType(jobs, JOB_TYPES.writingEvaluation).id,
+      new AIRetryableError('timed out'),
+      POLICY,
+    );
+
+    expect((await readSubmission(submissionId)).writingStatus).toBe('pending');
+  });
+
+  it('does not reclaim a job that is waiting out its backoff', async () => {
+    const { jobs } = await aFinalizedSubmission({ only: JOB_TYPES.writingEvaluation });
+    const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
+
+    await service().failJob(job.id, new AIRetryableError('timed out'), POLICY);
+
+    expect(await service().claimNextJob({ staleThresholdMs: STALE })).toBeNull();
+  });
+
+  it('reclaims the failed job once its backoff has passed', async () => {
+    const { jobs } = await aFinalizedSubmission({ only: JOB_TYPES.writingEvaluation });
+    const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
+
+    await service().failJob(job.id, new AIRetryableError('timed out'), POLICY);
+    // Move the due time into the past rather than sleeping through it — the same substitution the
+    // staleness tests make, and the reason the schedule is a parameter.
+    await prisma().processingJob.update({
+      where: { id: job.id },
+      data: { nextAttemptAt: new Date(Date.now() - 1_000) },
+    });
+
+    const claimed = await service().claimNextJob({ staleThresholdMs: STALE });
+
+    expect(claimed?.id).toBe(job.id);
+    // The claim does not reset the count, so the job still knows how many attempts it has had.
+    expect(claimed?.attemptCount).toBe(1);
+  });
+});
+
+describe('JobService.failJob — terminal outcomes', () => {
+  it('gives up after maxAttempts and marks both the job and the submission', async () => {
+    // FR-WRITE-011 / EDGE-004: the student sees "processing failed" rather than an indefinite
+    // "in progress", and the job stops consuming attempts against a provider that keeps refusing.
+    const { submissionId, jobs } = await aFinalizedSubmission();
+    const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
+
+    const outcomes = [];
+    for (let attempt = 0; attempt < POLICY.maxAttempts; attempt += 1) {
+      await prisma().processingJob.update({
+        where: { id: job.id },
+        data: { nextAttemptAt: new Date(Date.now() - 1_000) },
+      });
+      outcomes.push(await service().failJob(job.id, new AIRetryableError('still down'), POLICY));
+    }
+
+    expect(outcomes).toEqual(['retry_scheduled', 'retry_scheduled', 'failed_needs_review']);
+
+    const updated = await readJob(job.id);
+    expect(updated.status).toBe('failed_needs_review');
+    expect(updated.attemptCount).toBe(POLICY.maxAttempts);
+    expect(updated.lastError).toBe('still down');
+
+    const stored = await readSubmission(submissionId);
+    expect(stored.writingStatus).toBe('failed_needs_review');
+  });
+
+  it('preserves the student’s writing response exactly through every failure', async () => {
+    // FR-WRITE-011 and Section 12, and the reason this is asserted as a byte comparison rather than
+    // "the job ended up in the right state": the failure path is allowed to change every column it
+    // owns, and none of them is the one holding what the student wrote. A retry, a backoff, and an
+    // exhausted budget must leave it untouched.
+    const { submissionId, jobs } = await aFinalizedSubmission();
+    const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
+    const before = await readSubmission(submissionId);
+    const essayBefore = JSON.stringify((before.answers as DraftAnswers).writing?.essayText);
+
+    for (let attempt = 0; attempt < POLICY.maxAttempts; attempt += 1) {
+      await prisma().processingJob.update({
+        where: { id: job.id },
+        data: { nextAttemptAt: new Date(Date.now() - 1_000) },
+      });
+      await service().failJob(job.id, new AIRetryableError('still down'), POLICY);
+    }
+
+    const after = await readSubmission(submissionId);
+    expect(JSON.stringify((after.answers as DraftAnswers).writing?.essayText)).toBe(essayBefore);
+    expect(JSON.stringify(after.answers)).toBe(JSON.stringify(before.answers));
+  });
+
+  it('preserves the Student Problems original through an exhausted retry budget', async () => {
+    // FR-PROB-013 / EDGE-008, the same guarantee for the other job type — and the one where the
+    // original lives in a *column* the AI also writes near, so "the AI only writes the derived one"
+    // is worth asserting rather than assuming.
+    const { submissionId, jobs } = await aFinalizedSubmission();
+    const job = jobOfType(jobs, JOB_TYPES.studentProblemsText);
+    const before = await readSubmission(submissionId);
+
+    for (let attempt = 0; attempt < POLICY.maxAttempts; attempt += 1) {
+      await prisma().processingJob.update({
+        where: { id: job.id },
+        data: { nextAttemptAt: new Date(Date.now() - 1_000) },
+      });
+      await service().failJob(job.id, new AIRetryableError('still down'), POLICY);
+    }
+
+    const after = await readSubmission(submissionId);
+    expect(after.problemsTextStatus).toBe('failed_needs_review');
+    expect(after.problemsOpenTextOriginal).toBe(before.problemsOpenTextOriginal);
+    expect(after.problemsTextDerived).toBeNull();
+  });
+
+  it('does not retry a failure that says it cannot succeed', async () => {
+    // Section 8: malformed input is non-retryable. Retrying it would burn the budget and delay the
+    // visible outcome by the whole schedule for a certainty.
+    const { submissionId, jobs } = await aFinalizedSubmission();
+    const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
+
+    const outcome = await service().failJob(
+      job.id,
+      new AINonRetryableError('response text is blank'),
+      POLICY,
+    );
+
+    expect(outcome).toBe('failed_needs_review');
+    expect((await readJob(job.id)).attemptCount).toBe(1);
+    expect((await readSubmission(submissionId)).writingStatus).toBe('failed_needs_review');
+  });
+
+  it('gives a schema-validation failure exactly one retry', async () => {
+    // Section 8: "a schema-validation failure on a well-formed-but-wrong LLM response is treated as
+    // retryable once, since a re-prompt may succeed." One retry, not the whole budget — the same
+    // wrong shape twice is not going to become right on a third identical prompt.
+    const { jobs } = await aFinalizedSubmission();
+    const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
+
+    const first = await service().failJob(job.id, new AIValidationError('bad shape'), POLICY);
+    expect(first).toBe('retry_scheduled');
+    expect((await readJob(job.id)).attemptCount).toBe(1);
+
+    await prisma().processingJob.update({
+      where: { id: job.id },
+      data: { nextAttemptAt: new Date(Date.now() - 1_000) },
+    });
+
+    const second = await service().failJob(job.id, new AIValidationError('bad shape'), POLICY);
+    expect(second).toBe('failed_needs_review');
+  });
+
+  it('fails one job type without touching the other', async () => {
+    // FR-WRITE-011 and FR-PROB-013 are separate failure modes (Section 6). A writing failure that
+    // also marked Student Problems processing failed would report a problem that does not exist and
+    // hide the one that does.
+    const { submissionId, jobs } = await aFinalizedSubmission();
+    const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
+
+    for (let attempt = 0; attempt < POLICY.maxAttempts; attempt += 1) {
+      await prisma().processingJob.update({
+        where: { id: job.id },
+        data: { nextAttemptAt: new Date(Date.now() - 1_000) },
+      });
+      await service().failJob(job.id, new AIRetryableError('still down'), POLICY);
+    }
+
+    const stored = await readSubmission(submissionId);
+    expect(stored.writingStatus).toBe('failed_needs_review');
+    expect(stored.problemsTextStatus).toBe('pending');
+    const otherJob = jobOfType(jobs, JOB_TYPES.studentProblemsText);
+    expect((await readJob(otherJob.id)).status).toBe('pending');
+  });
+
+  it('records a bounded description of a failure that carries no message', async () => {
+    // The job row is read by staff, so what lands in it is bounded and never a stringified value
+    // that came from the request or the model.
+    const { jobs } = await aFinalizedSubmission();
+    const job = jobOfType(jobs, JOB_TYPES.writingEvaluation);
+
+    await service().failJob(job.id, { not: 'an error' }, POLICY);
+
+    expect((await readJob(job.id)).lastError).toBe('Non-Error thrown: object');
+  });
+
+  it('answers not_found for a job that does not exist', async () => {
+    const outcome = await service().failJob(
+      '00000000-0000-0000-0000-000000000000',
+      new AIRetryableError('timed out'),
+      POLICY,
+    );
+
+    expect(outcome).toBe('not_found');
+  });
+});
