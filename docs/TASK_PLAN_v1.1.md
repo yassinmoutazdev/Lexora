@@ -609,6 +609,18 @@ Task **identifiers are unchanged**. `T8.3.2` stays `T8.3.2` and stays listed und
 - [x] T8.2.2 — Build `SubmissionDetailPage.tsx`, clearly labeling Student Problems AI-derived categories/normalized text as derived, not the student's original words.
       Ref: PRD Section 9.5 (FR-PROB-011), Section 9.7 (FR-STAFF-010)
       Output: frontend/src/pages/staff/SubmissionDetailPage.tsx · manual verification: derived data is visually distinguished from the original response
+- [x] T8.2.3 — Add a recent-submissions list to `DashboardPage.tsx`, so an individual submission is reachable from the interface.
+      Ref: PRD Section 9.7 (FR-STAFF-010, FR-STAFF-012), Section 8.3 (Staff journey step 3); ARCHITECTURE Section 10 (the API is fixed at ten endpoints — the list rides on `GET /api/staff/dashboard`), Section 18
+      Output: DashboardPage.tsx submissions list + `DashboardService.recentSubmissions` · integration test: rows are cohort-filtered, newest first, and capped
+
+      **Added mid-Epic (2026-09-16), not in the original plan.** E8 as written satisfies FR-STAFF-010
+      by building the route (T8.2.1) and the page (T8.2.2) but gives staff no way to *reach* the
+      page: no task in E8 put a link to it anywhere, so the view existed only at a URL a staff
+      member would have to know. FR-STAFF-010 says staff "must be able to view individual
+      submissions", which a page with no inbound path does not deliver. This task closes that gap and
+      nothing else — it is the smallest list that makes the existing page reachable, deliberately not
+      a sortable, searchable, pageable table (FR-STAFF-012), and deliberately not an eleventh
+      endpoint (Section 10). Flagged in the commit that added it.
 
 ### Feature 8.3 — Dashboard Frontend
 

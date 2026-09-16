@@ -6,7 +6,7 @@ import type {
   StatementAggregate,
 } from '../../../../src/domain/staff/DashboardService';
 import { ApiError, downloadStaffExportCsv, getStaffDashboard } from '../../api/client';
-import { navigate } from '../../router';
+import { Link, navigate, submissionDetailPath } from '../../router';
 
 /**
  * The staff dashboard (T8.3.1) — the pilot's limited internal analysis view (PRD Section 9.7).
@@ -327,6 +327,62 @@ export function DashboardBody({
       </div>
 
       <div className="card">
+        <h2>Recent submissions</h2>
+        <p className="hint">
+          Open any of these to see the full record, including the Student Problems responses that are
+          never shown to students. Opening one is recorded in the server log (Section 13).
+        </p>
+
+        {dashboard.recentSubmissions.length === 0 ? (
+          <p className="muted">No submissions in this view yet.</p>
+        ) : (
+          <table className="submission-table">
+            <thead>
+              <tr>
+                <th scope="col">Roll number</th>
+                <th scope="col">Name</th>
+                <th scope="col">Status</th>
+                <th scope="col">Submitted</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dashboard.recentSubmissions.map((submission) => (
+                <tr key={submission.id}>
+                  <td>{submission.rollNumber}</td>
+                  <td>
+                    {/*
+                      The whole row is not a link: a row that navigates on click is invisible to a
+                      keyboard and to anyone using a screen reader, and it cannot be opened in a new
+                      tab. The link is on the name, which is what a reader is looking for.
+                    */}
+                    <Link to={submissionDetailPath(submission.id)}>{submission.studentName}</Link>
+                  </td>
+                  <td>
+                    {submission.status === 'submitted' ? 'Submitted' : 'In progress'}
+                  </td>
+                  <td className="muted">
+                    {submission.submittedAt === null
+                      ? '—'
+                      : new Date(submission.submittedAt).toLocaleDateString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {/*
+          Said plainly, because the list is capped and a staff member counting rows against the
+          "Started" figure above would otherwise think records were missing.
+        */}
+        {dashboard.recentSubmissions.length >= 25 && (
+          <p className="hint">
+            Showing the 25 most recent. Export the data for the full set.
+          </p>
+        )}
+      </div>
+
+      <div className="card">
         <h2>Score distribution</h2>
         <p className="hint">
           Every section is shown as a percentage of its own maximum, so Grammar, Vocabulary, Reading,
@@ -364,9 +420,8 @@ export function DashboardBody({
 
       <div className="card">
         <p className="hint">
-          This view is aggregates only. An individual submission has its own page, staff-session
-          gated and logged on every access (Section 13), but nothing here links to one — the plan
-          gives the dashboard no submission list, and FR-STAFF-012 asks it to stay simple.
+          Every submission is reachable from the list above; the export is for working with the data
+          outside the application.
         </p>
       </div>
     </main>

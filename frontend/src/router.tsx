@@ -63,6 +63,28 @@ export function usePathname(): string {
 }
 
 /**
+ * The one route pattern that carries a parameter (ARCHITECTURE Section 9).
+ *
+ * Declared here rather than in `App.tsx` because two modules need it and they must agree: the route
+ * table matches against it, and the dashboard builds links to it. A literal in each would be two
+ * spellings of one path, and the day they diverged the dashboard would link to a 404 that no test
+ * would catch — `matchPath` would simply return null and `App` would render `NotFound`.
+ */
+export const SUBMISSION_DETAIL_PATTERN = '/staff/submissions/:submissionId';
+
+/**
+ * The URL of one submission's staff page.
+ *
+ * The counterpart to `matchPath` for the same pattern, so a link is built from the same string the
+ * route is matched against. The id is percent-encoded because it is a value travelling in a path
+ * segment, not because a submission id is expected to contain anything unusual — the encoding is
+ * what makes that an assumption the code does not have to make.
+ */
+export function submissionDetailPath(submissionId: string): string {
+  return `/staff/submissions/${encodeURIComponent(submissionId)}`;
+}
+
+/**
  * Matches a route pattern against a pathname, returning its parameters — or null.
  *
  * ## Why this exists at all

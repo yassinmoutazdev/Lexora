@@ -321,6 +321,15 @@ describe('GET /api/staff/dashboard', () => {
     // The conditional difficulty comparison is reported as omitted, with its reason, rather than
     // being silently absent from the payload (FR-STAFF-007) — the committed content is provisional.
     expect(body.difficulty).toEqual({ available: false, reason: 'content_not_approved' });
+
+    // The way into an individual submission, on the same payload (T8.2.3, FR-STAFF-010). Section 10
+    // fixes the API at ten endpoints, so the list rides here rather than at an eleventh.
+    expect(body.recentSubmissions).toHaveLength(2);
+    expect(body.recentSubmissions.map((row: { status: string }) => row.status).sort()).toEqual([
+      'draft',
+      'submitted',
+    ]);
+    expect(body.recentSubmissions[0].id).toMatch(/[0-9a-f-]{36}/);
   });
 
   it('covers every cohort when no filter is given', async () => {

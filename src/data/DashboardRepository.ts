@@ -88,7 +88,56 @@ export type DifficultyInputRow = {
   reading: unknown;
 };
 
+/** One submission as the dashboard's list shows it. */
+export type RecentSubmissionRow = {
+  id: string;
+  rollNumberRaw: string;
+  studentName: string;
+  status: string;
+  submittedAt: Date | null;
+};
+
 export class DashboardRepository {
+  /**
+   * The most recent submissions, for the dashboard's list (FR-STAFF-010).
+   *
+   * ## Why this is a row listing in a file about aggregates
+   *
+   * It is not an aggregate, and it would sit more naturally in `SubmissionRepository` on the
+   * grounds that it returns submissions. It is here because of *why* it exists: the dashboard needs
+   * a way into the individual-submission view, and this is the dashboard's read of that data — the
+   * same cohort filter, the same request, the same payload. Splitting it across two repositories
+   * would put one screen's data behind two objects with no rule separating them.
+   *
+   * ## Why a limit, and why no sorting or paging
+   *
+   * FR-STAFF-012 asks the dashboard to stay simple and focused rather than become a BI platform, so
+   * there is no sort control, no paging, and no search. Newest first is the only order that needs no
+   * explaining, and the limit is what keeps the list a navigation aid rather than a table of the
+   * whole cohort — the full dataset is what the CSV export is for.
+   *
+   * `submittedAt` is nullable, so a draft would sort ahead of every submitted row under a plain
+   * descending sort on it. Drafts are therefore ordered by `createdAt` in the same expression: a
+   * student who has not submitted yet still appears, at the position their work was started, which
+   * is where a staff member looking for "who has started but not finished" would expect to find it.
+   */
+  async recentSubmissions(
+    filter: DashboardFilter,
+    limit: number,
+  ): Promise<RecentSubmissionRow[]> {
+    return getPrismaClient().$queryRaw<RecentSubmissionRow[]>`
+      SELECT s."id",
+             s."rollNumberRaw" AS "rollNumberRaw",
+             s."studentName",
+             s."status"::text AS "status",
+             s."submittedAt"
+        FROM "Submission" s
+       WHERE TRUE ${cohortPredicate(filter)}
+       ORDER BY COALESCE(s."submittedAt", s."createdAt") DESC, s."rollNumberNormalized" ASC
+       LIMIT ${limit}
+    `;
+  }
+
   /**
    * Every cohort, for the filter control (FR-STAFF-009).
    *

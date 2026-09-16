@@ -4,7 +4,7 @@ import { SubmissionDetailPage } from './pages/staff/SubmissionDetailPage';
 import { AssessmentPage } from './pages/student/AssessmentPage';
 import { EntryPage } from './pages/student/EntryPage';
 import { ReportPage } from './pages/student/ReportPage';
-import { Link, matchPath, usePathname } from './router';
+import { Link, SUBMISSION_DETAIL_PATTERN, matchPath, usePathname } from './router';
 
 /**
  * The application root, and the route table (ARCHITECTURE Section 4 — `App.tsx # Router`).
@@ -32,7 +32,10 @@ export function App() {
   // because a `case` cannot match a family of paths — and left as one explicit pattern rather than a
   // routing table, because there is exactly one such route and a table for one entry would be a
   // structure to maintain that answers nothing.
-  const submissionDetail = matchPath('/staff/submissions/:submissionId', pathname);
+  //
+  // The pattern lives in `router.tsx` beside `submissionDetailPath`, which the dashboard uses to
+  // build these links, so the route and the link are one string rather than two that agree today.
+  const submissionDetail = matchPath(SUBMISSION_DETAIL_PATTERN, pathname);
   if (submissionDetail?.submissionId !== undefined) {
     return <SubmissionDetailPage submissionId={submissionDetail.submissionId} />;
   }

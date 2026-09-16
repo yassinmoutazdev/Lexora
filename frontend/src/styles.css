@@ -754,3 +754,37 @@ button.secondary:hover:not(:disabled) {
   margin-top: 1rem;
 }
 
+
+/*
+ * The recent-submissions list (T8.2.3) — the way into an individual submission (FR-STAFF-010).
+ *
+ * A real table, because the data is tabular and a table is what a screen reader can navigate by
+ * column. `width: 100%` with a scroll wrapper rather than a fixed layout: the roll number and name
+ * are student-supplied and can be long, and a table that widens the page is worse than one that
+ * scrolls inside its card.
+ */
+.submission-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+}
+
+.submission-table th,
+.submission-table td {
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-top: 1px solid var(--line-soft);
+  vertical-align: baseline;
+}
+
+.submission-table th {
+  border-top: none;
+  color: var(--ink-soft);
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+.submission-table tbody tr:hover {
+  background: var(--page);
+}

@@ -385,9 +385,110 @@ describe('DashboardService — cohort filter (FR-STAFF-009)', () => {
   });
 });
 
+/**
+ * The recent-submissions list (T8.2.3, FR-STAFF-010).
+ *
+ * The list exists so a staff member can reach an individual submission at all — without it the
+ * detail page is reachable only by typing its URL, which is not "staff must be able to view
+ * individual submissions". So the tests are about the list being a *usable way in*: the right rows,
+ * in a sensible order, filtered with the rest of the dashboard, and capped.
+ */
+describe('DashboardService — recent submissions (FR-STAFF-010)', () => {
+  it('lists submitted and in-progress rows, newest first', async () => {
+    const cohort = await createCohort();
+
+    await createSubmission(cohort.id, {
+      status: 'submitted',
+      rollNumberRaw: 'R-OLD',
+      studentName: 'Older',
+      submittedAt: new Date('2026-01-01T10:00:00.000Z'),
+    });
+    await createSubmission(cohort.id, {
+      status: 'submitted',
+      rollNumberRaw: 'R-NEW',
+      studentName: 'Newer',
+      submittedAt: new Date('2026-03-01T10:00:00.000Z'),
+    });
+    await createSubmission(cohort.id, {
+      status: 'draft',
+      rollNumberRaw: 'R-DRAFT',
+      studentName: 'In Progress',
+    });
+
+    const payload = await dashboard(cohort.id);
+    const listed = payload.recentSubmissions;
+
+    expect(listed).toHaveLength(3);
+
+    // Newest submission first. The draft has never been submitted, so it sorts on `createdAt` —
+    // which is now, i.e. ahead of both submitted rows rather than behind them.
+    expect(listed.map((row) => row.studentName)).toEqual(['In Progress', 'Newer', 'Older']);
+
+    expect(listed[0]).toMatchObject({ status: 'draft', submittedAt: null });
+    expect(listed[1]).toMatchObject({
+      rollNumber: 'R-NEW',
+      studentName: 'Newer',
+      status: 'submitted',
+      submittedAt: '2026-03-01T10:00:00.000Z',
+    });
+  });
+
+  it('is filtered by cohort along with the rest of the dashboard', async () => {
+    const first = await createCohort();
+    const second = await createCohort();
+
+    await createSubmission(first.id, { status: 'submitted', studentName: 'First Cohort Student' });
+    await createSubmission(second.id, { status: 'submitted', studentName: 'Second Cohort Student' });
+
+    const all = await dashboard();
+    expect(all.recentSubmissions.map((row) => row.studentName).sort()).toEqual([
+      'First Cohort Student',
+      'Second Cohort Student',
+    ]);
+
+    const onlyFirst = await dashboard(first.id);
+    expect(onlyFirst.recentSubmissions.map((row) => row.studentName)).toEqual([
+      'First Cohort Student',
+    ]);
+  });
+
+  it('caps the list, so it stays a navigation aid rather than a second listing of the cohort', async () => {
+    const cohort = await createCohort();
+
+    // One more than the cap. Created through the fixture rather than in a loop of 26 awaited
+    // inserts, so the *order* is fixed by explicit submission times instead of by insertion order.
+    for (let index = 0; index < 26; index += 1) {
+      await createSubmission(cohort.id, {
+        status: 'submitted',
+        rollNumberRaw: `CAP-${String(index).padStart(2, '0')}`,
+        submittedAt: new Date(Date.UTC(2026, 0, 1 + index)),
+      });
+    }
+
+    const payload = await dashboard(cohort.id);
+
+    expect(payload.recentSubmissions).toHaveLength(25);
+    // The count above the list is still the whole cohort — the cap is the list's, not the figure's.
+    expect(payload.counts.submitted).toBe(26);
+    // And the 25 kept are the newest, not an arbitrary 25.
+    expect(payload.recentSubmissions[0]?.rollNumber).toBe('CAP-25');
+    expect(payload.recentSubmissions.at(-1)?.rollNumber).toBe('CAP-01');
+  });
+
+  it('carries the id the detail page and the export both address a submission by', async () => {
+    const cohort = await createCohort();
+    const submission = await createSubmission(cohort.id, { status: 'submitted' });
+
+    const [listed] = (await dashboard(cohort.id)).recentSubmissions;
+
+    // The same id in both places is what lets a staff member move between the list, the record, and
+    // the spreadsheet.
+    expect(listed?.id).toBe(submission.id);
+  });
+});
+
 /** All six bands at zero, in order — the shape an empty cohort renders. */
-function bandCountsAtZero() {
-  return ['0–49%', '50–59%', '60–69%', '70–79%', '80–89%', '90–100%'].map((label) => ({
+function bandCountsAtZero() {  return ['0–49%', '50–59%', '60–69%', '70–79%', '80–89%', '90–100%'].map((label) => ({
     label,
     count: 0,
   }));

@@ -4,7 +4,7 @@ import {
   scoreDeterministicSections,
   sectionMaxScores,
 } from '../scoring/DeterministicScoringService.ts';
-import type { DeterministicSectionKey } from '../../shared/types/sections.ts';
+import type { DeterministicSectionKey, SubmissionStatus } from '../../shared/types/sections.ts';
 import type { DraftAnswers } from '../../shared/types/draft.ts';
 import { dashboardRepository, type DashboardRepository, type DashboardFilter } from '../../data/DashboardRepository.ts';
 
@@ -175,6 +175,24 @@ export type DerivedCategoryAggregate = {
   count: number;
 };
 
+/**
+ * One submission as the dashboard's list shows it (FR-STAFF-010, T8.2.3).
+ *
+ * Deliberately not the whole record: this is a *way in* to the individual-submission page, and a
+ * list that carried scores or Student Problems data would be the dashboard trying to be the detail
+ * view. The id is included because the page is addressed by it, and because the CSV export uses the
+ * same id — so a staff member can move between the two.
+ */
+export type DashboardSubmissionSummary = {
+  id: string;
+  /** As the student typed it, preserved for display (Section 6). */
+  rollNumber: string;
+  studentName: string;
+  status: SubmissionStatus;
+  /** ISO 8601, or null for a submission that has not been submitted. */
+  submittedAt: string | null;
+};
+
 export type DashboardPayload = {
   /** The cohort the figures cover, or null for all cohorts. */
   cohort: CohortSummary | null;
@@ -207,6 +225,22 @@ export type DashboardPayload = {
   };
   /** The conditional difficulty-level comparison (FR-STAFF-007). */
   difficulty: DifficultyComparison;
+  /**
+   * The most recent submissions, newest first, as links into the individual-submission view
+   * (FR-STAFF-010, T8.2.3).
+   *
+   * ## Why it is part of this payload rather than its own endpoint
+   *
+   * ARCHITECTURE Section 10 fixes the API surface at ten endpoints and gives this one as *"aggregate
+   * metrics, filterable by cohort"*. Adding `/api/staff/submissions` for the list would be an
+   * eleventh endpoint the architecture does not define, and Section 10's table is not advisory —
+   * it is the contract. The list is what the dashboard needs to make FR-STAFF-010 reachable, so it
+   * is part of the dashboard's answer, filtered the same way and fetched at the same time.
+   *
+   * Capped at `RECENT_SUBMISSIONS_LIMIT`. The complete dataset is the CSV export's job (PRD G5);
+   * this is a navigation aid, not a second listing of the cohort.
+   */
+  recentSubmissions: DashboardSubmissionSummary[];
 };
 
 /**
@@ -301,6 +335,16 @@ const DIFFICULTY_SECTIONS: DeterministicSectionKey[] = ['grammar', 'vocabulary',
  */
 const DIFFICULTY_LEVELS: Difficulty[] = ['basic', 'intermediate', 'upper-intermediate'];
 
+/**
+ * How many submissions the dashboard lists (T8.2.3).
+ *
+ * Twenty-five is roughly a screenful of rows, which is the point: the list exists to give staff a
+ * way into an individual submission (FR-STAFF-010), and a list longer than a screen stops being
+ * something you scan and becomes something you search — at which point the CSV export, which has
+ * every row and every column, is the right tool (PRD G5, FR-STAFF-012).
+ */
+const RECENT_SUBMISSIONS_LIMIT = 25;
+
 export type DashboardServiceDeps = {
   dashboard: DashboardRepository;
   content: ContentLoader;
@@ -331,15 +375,23 @@ export class DashboardService {
     // exist, and running the queries anyway would be four scans to build one.
     if (filter.cohortId !== undefined && cohort === null) return { outcome: 'unknown_cohort' };
 
-    const [cohorts, processingRows, scoreRows, likertRows, derivedRows, difficultyRows] =
-      await Promise.all([
-        this.deps.dashboard.listCohorts(),
-        this.deps.dashboard.countByStatusAndProcessing(filter),
-        this.deps.dashboard.scoreDistribution(filter),
-        this.deps.dashboard.likertResponseCounts(filter),
-        this.deps.dashboard.derivedCategoryCounts(filter),
-        this.deps.dashboard.difficultyInputs(filter),
-      ]);
+    const [
+      cohorts,
+      processingRows,
+      scoreRows,
+      likertRows,
+      derivedRows,
+      difficultyRows,
+      recentRows,
+    ] = await Promise.all([
+      this.deps.dashboard.listCohorts(),
+      this.deps.dashboard.countByStatusAndProcessing(filter),
+      this.deps.dashboard.scoreDistribution(filter),
+      this.deps.dashboard.likertResponseCounts(filter),
+      this.deps.dashboard.derivedCategoryCounts(filter),
+      this.deps.dashboard.difficultyInputs(filter),
+      this.deps.dashboard.recentSubmissions(filter, RECENT_SUBMISSIONS_LIMIT),
+    ]);
 
     return {
       outcome: 'ok',
@@ -355,6 +407,13 @@ export class DashboardService {
           analysedResponses: countAnalysedResponses(processingRows),
         },
         difficulty: this.buildDifficulty(difficultyRows),
+        recentSubmissions: recentRows.map((row) => ({
+          id: row.id,
+          rollNumber: row.rollNumberRaw,
+          studentName: row.studentName,
+          status: row.status as SubmissionStatus,
+          submittedAt: row.submittedAt?.toISOString() ?? null,
+        })),
       },
     };
   }
@@ -472,7 +531,7 @@ export class DashboardService {
     const byStatement = new Map<string, { row: LikertRowForStatement; counts: Map<number, number> }>();
 
     for (const row of rows) {
-      const key = `${row.contentVersion} ${row.statementId}`;
+      const key = `${row.contentVersion}\u0000${row.statementId}`;
       const held = byStatement.get(key) ?? { row, counts: new Map<number, number>() };
 
       held.counts.set(row.value, (held.counts.get(row.value) ?? 0) + row.count);
@@ -535,8 +594,8 @@ export class DashboardService {
       if (byVersion !== 0) return byVersion;
 
       return (
-        (order.get(`${a.contentVersion} ${a.statementId}`) ?? 0) -
-        (order.get(`${b.contentVersion} ${b.statementId}`) ?? 0)
+        (order.get(`${a.contentVersion}\u0000${a.statementId}`) ?? 0) -
+        (order.get(`${b.contentVersion}\u0000${b.statementId}`) ?? 0)
       );
     });
 
@@ -680,6 +739,15 @@ type ScoreRowForSection = {
   readingScore: number | null;
   writingOverallScore: number | null;
   count: number;
+};
+
+/** The row shape the recent-submissions list reads. */
+type RecentSubmissionRowLike = {
+  id: string;
+  rollNumberRaw: string;
+  studentName: string;
+  status: string;
+  submittedAt: Date | null;
 };
 
 type LikertRowForStatement = {
