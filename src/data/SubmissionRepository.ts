@@ -311,6 +311,35 @@ export class SubmissionRepository {
   }
 
   /**
+   * Every submission, with its cohort, for the staff CSV export (FR-STAFF-011, PRD G5).
+   *
+   * A row dump rather than an aggregate, which is why it lives here rather than in
+   * `DashboardRepository`: it returns the submissions themselves, and the export's whole job is to
+   * hand an analyst the record rather than a summary of it.
+   *
+   * ## Why there is no cursor
+   *
+   * Section 14 puts the pilot at "tens to a few hundred" submissions, so this reads them in one
+   * query. Prisma's `cursor`/`take` paging would stream a source that at this size fits in memory
+   * several times over, and the streaming that matters for the export is the *response* — the CSV is
+   * written to the socket as it is produced rather than assembled into one string first, which is
+   * what `csv-stringify` is in the dependency list for (Section 2).
+   *
+   * `include` rather than a second query: the export needs each submission's cohort code and name,
+   * and joining in the database is one round trip instead of one plus N.
+   *
+   * Ordered by submission time, then by roll number for rows that share one. An unordered export is
+   * the same data, but a diff between two exports of the same cohort would be unreadable.
+   */
+  async findAllForExport(cohortId?: string): Promise<ExportSubmission[]> {
+    return getPrismaClient().submission.findMany({
+      where: cohortId === undefined ? {} : { cohortId },
+      include: { cohort: { select: { code: true, name: true } } },
+      orderBy: [{ submittedAt: 'asc' }, { rollNumberNormalized: 'asc' }],
+    });
+  }
+
+  /**
    * Resolves everything a background job needs to run, from the Submission row and nothing else
    * (ARCHITECTURE Section 8, Section 18 — canonical location for "resolving a submission's
    * authoritative response text / content for background evaluation").
@@ -484,8 +513,19 @@ export type SectionMergeResult =
   | { outcome: 'not_draft'; status: SubmissionStatus }
   | { outcome: 'not_found' };
 
-/** Whether an error is Postgres' unique-constraint violation as Prisma reports it. */
-function isUniqueConstraintViolation(error: unknown): boolean {
+/**
+ * A submission as the CSV export reads it: the row itself, plus the two cohort fields the export
+ * needs to caption it.
+ *
+ * Declared as `Submission & { cohort: … }` rather than as a hand-written column list, so adding a
+ * column to the model does not silently stop this query from returning it — the export decides which
+ * fields it writes, and the data layer decides nothing.
+ */
+export type ExportSubmission = Submission & {
+  cohort: { code: string; name: string };
+};
+
+/** Whether an error is Postgres' unique-constraint violation as Prisma reports it. */function isUniqueConstraintViolation(error: unknown): boolean {
   return (
     typeof error === 'object' &&
     error !== null &&

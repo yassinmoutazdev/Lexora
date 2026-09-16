@@ -29,6 +29,27 @@ import type { ZodTypeAny } from 'zod';
  */
 
 /**
+ * The 400 body a `zod` refusal produces.
+ *
+ * Exported because the dashboard's cohort filter is validated from the *query* string rather than
+ * from a body (T8.1.3), and a route that spelled this shape for itself would be a second definition
+ * of one response contract — the thing Section 10's "malformed input never reaches business logic"
+ * is enforced through, and therefore the last place two copies should be allowed to drift.
+ */
+export function invalidRequestErrorBody(error: z.ZodError): {
+  error: string;
+  details: { field: string; message: string }[];
+} {
+  return {
+    error: 'Invalid request body',
+    details: error.issues.map((issue) => ({
+      field: issue.path.join('.') || '(root)',
+      message: issue.message,
+    })),
+  };
+}
+
+/**
  * Wraps a `zod` schema as an Express middleware.
  *
  * On success the parsed value *replaces* `req.body`, so everything downstream reads the schema's
@@ -40,13 +61,7 @@ export function validateBody(schema: ZodTypeAny): RequestHandler {
     const result = schema.safeParse(req.body);
 
     if (!result.success) {
-      res.status(400).json({
-        error: 'Invalid request body',
-        details: result.error.issues.map((issue) => ({
-          field: issue.path.join('.') || '(root)',
-          message: issue.message,
-        })),
-      });
+      res.status(400).json(invalidRequestErrorBody(result.error));
       return;
     }
 

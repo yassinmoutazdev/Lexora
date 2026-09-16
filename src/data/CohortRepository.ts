@@ -24,6 +24,18 @@ export class CohortRepository {
   async findByCode(code: string): Promise<Cohort | null> {
     return getPrismaClient().cohort.findUnique({ where: { code } });
   }
+
+  /**
+   * Looks a cohort up by primary key.
+   *
+   * Distinct from `findByCode` because the two callers hold different things: a student typed a
+   * code, while the staff submission view (T8.2.1) has a submission row carrying a `cohortId` and
+   * needs the code and name to caption it. Resolving that through the code would mean reading the
+   * id only to turn it back into the code the row already points at.
+   */
+  async findById(id: string): Promise<Cohort | null> {
+    return getPrismaClient().cohort.findUnique({ where: { id } });
+  }
 }
 
 /** The process-wide repository instance. */

@@ -168,6 +168,30 @@ function scoreSection(questions: Question[], given: ChoiceAnswers | undefined): 
 }
 
 /**
+ * The denominator for each deterministic section — the maximum `scoreDeterministicSections` scores
+ * it out of.
+ *
+ * The staff dashboard needs this and nothing else from scoring: FR-STAFF-005/006 put Grammar,
+ * Vocabulary, Reading, and Writing on one comparable axis, and the three deterministic sections are
+ * out of different totals (9, 9, and 8 under v1 content), so a raw score cannot be compared across
+ * them or against Writing's 0–100 without the maximum it was out of.
+ *
+ * It is exported from here rather than recomputed by the caller for the reason `questionsOf` gives:
+ * "every question in a section" must have exactly one definition, and Reading's questions are
+ * nested under passages. A dashboard that summed `content.grammar.questions` for itself would agree
+ * with this until the day it didn't.
+ *
+ * Deliberately a separate function rather than only a field on `SectionScore`: the dashboard is
+ * aggregating rows it never scored, so it has no `SectionScore` to read the field from.
+ */
+export function sectionMaxScores(content: DeterministicContent): Record<DeterministicSectionKey, number> {
+  const maxOf = (section: DeterministicSectionKey) =>
+    questionsOf(section, content).reduce((total, question) => total + question.points, 0);
+
+  return { grammar: maxOf('grammar'), vocabulary: maxOf('vocabulary'), reading: maxOf('reading') };
+}
+
+/**
  * Scores Grammar, Vocabulary, and Reading (FR-DET-003), with the per-question explanation
  * FR-DET-004 requires.
  *

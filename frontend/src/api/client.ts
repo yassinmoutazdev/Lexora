@@ -1,5 +1,7 @@
+import type { DashboardPayload } from '../../../src/domain/staff/DashboardService';
 import type { DraftAutosaveBody, StudentDraft, StudentReport } from '../../../src/shared/types/draft';
 import type { SectionKey, SubmissionStatus } from '../../../src/shared/types/sections';
+import type { StaffSubmissionDetail } from '../../../src/shared/types/staff';
 
 /**
  * The frontend's typed wrapper over `fetch` (ARCHITECTURE Section 4 — `frontend/src/api/client.ts`).
@@ -198,6 +200,134 @@ export async function saveSection(
  */
 export async function submitAssessment(): Promise<void> {
   await requestJson<unknown>('/api/student/submit', { method: 'POST' });
+}
+
+/** What a staff member types on the login page (FR-STAFF-001). */
+export type StaffCredentials = {
+  email: string;
+  password: string;
+};
+
+/**
+ * Exchanges staff credentials for a staff session (Section 10, FR-STAFF-001).
+ *
+ * The response carries no payload beyond success, and there is nothing else it could carry: one
+ * permission level exists in the MVP (FR-STAFF-003), so the cookie the response sets is the whole
+ * of what the SPA gains. It does not return the cookie or read it — it is httpOnly (Section 13),
+ * so the browser holds it and this module never sees it.
+ *
+ * A refusal arrives as an `ApiError` carrying the server's own message, and Section 11 makes that
+ * message the same one for a wrong password and for an email with no account behind it. So this
+ * call cannot be made to tell the two apart even by a caller who wanted to — the distinction is
+ * refused on the server, not merely left unrendered here.
+ */
+export async function staffLogin(credentials: StaffCredentials): Promise<void> {
+  await requestJson<{ ok: true }>('/api/staff/login', {
+    method: 'POST',
+    body: JSON.stringify(credentials),
+  });
+}
+
+/**
+ * The dashboard's aggregate metrics (Section 10, FR-STAFF-004–009).
+ *
+ * `cohortId` is omitted rather than sent empty for "all cohorts", because that is what the server
+ * treats as unfiltered: omitting the parameter and sending an empty string are different requests,
+ * and only the first means "everything". The server refuses an id that names no cohort with a 404
+ * rather than answering with an empty payload, so a stale filter cannot be mistaken for a cohort
+ * with no data.
+ *
+ * The return type is imported from `DashboardService` — `import type`, so nothing of that module
+ * reaches the browser bundle. It lives there rather than in `src/shared/types` because the dashboard
+ * payload is the service's own answer, passed through by the route unchanged; see the note in
+ * `src/shared/types/staff.ts`.
+ */
+export async function getStaffDashboard(cohortId?: string): Promise<DashboardPayload> {
+  const query = cohortId === undefined ? '' : `?cohortId=${encodeURIComponent(cohortId)}`;
+
+  return requestJson<DashboardPayload>(`/api/staff/dashboard${query}`);
+}
+
+/**
+ * One submission in full, for authorized staff (Section 10, FR-STAFF-010).
+ *
+ * The id goes in the path, which is the one place in this application where a record is named by a
+ * URL — and it is a *staff* route behind a staff session, deliberately unlike the student side,
+ * where Section 9 has no ID-bearing route at all (NFR-SEC-009). The two are not in tension: a
+ * student session is scoped to exactly one submission by the cookie, while a staff session is a
+ * credential and the id is a parameter of the request it authorizes.
+ *
+ * A `401` means the staff session has ended and the page belongs back at the login form; a `404`
+ * means the id names no submission, which is a state the page reports rather than redirects on.
+ */
+export async function getStaffSubmissionDetail(submissionId: string): Promise<StaffSubmissionDetail> {
+  return requestJson<StaffSubmissionDetail>(
+    `/api/staff/submissions/${encodeURIComponent(submissionId)}`,
+  );
+}
+
+/**
+ * Downloads the CSV export as a file (Section 10, FR-STAFF-011).
+ *
+ * The one call in this module that does not go through `requestJson`, because its success response
+ * is not JSON. Its *failures* still are — every refusal this API produces is the `{ error, details }`
+ * shape Section 11 defines — so those are parsed exactly as `requestJson` parses them and thrown as
+ * the same `ApiError`, and a page handles a refused export the way it handles every other refusal.
+ *
+ * The filename comes from the server's `Content-Disposition` rather than being rebuilt here. The
+ * server is what decided to date the file and to name the cohort in it; a second construction of the
+ * same name would be a second place for it to differ.
+ *
+ * Fetched into a blob rather than triggered by an `<a href download>`, which would be shorter. A
+ * plain anchor cannot see a 401 — the browser would save the error body as a `.csv` file and the
+ * staff member would open a one-line JSON document believing it was their data. Fetching lets the
+ * page recognise an ended session and send them to the login form instead.
+ */
+export async function downloadStaffExportCsv(
+  cohortId?: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const query = cohortId === undefined ? '' : `?cohortId=${encodeURIComponent(cohortId)}`;
+
+  let response: Response;
+  try {
+    response = await fetch(`/api/staff/export.csv${query}`, {
+      credentials: 'same-origin',
+      headers: { Accept: 'text/csv' },
+    });
+  } catch {
+    throw new ApiError(fallbackMessage(0), 0);
+  }
+
+  if (!response.ok) {
+    let body: unknown;
+    try {
+      body = JSON.parse(await response.text());
+    } catch {
+      body = undefined;
+    }
+
+    const { message, details } = readErrorBody(body);
+    throw new ApiError(message ?? fallbackMessage(response.status), response.status, details);
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: filenameFrom(response) ?? 'lexora-submissions.csv',
+  };
+}
+
+/**
+ * The `filename="…"` the server set, if it set one.
+ *
+ * Read defensively because a `Content-Disposition` header is a string this code did not compose: it
+ * may be absent (a proxy stripped it), or shaped differently than expected. A missing name falls back
+ * to a generic one at the call site rather than throwing — the download is still correct, and a
+ * filename is not worth failing it over.
+ */
+function filenameFrom(response: Response): string | undefined {
+  const disposition = response.headers.get('content-disposition');
+
+  return disposition?.match(/filename="([^"]*)"/)?.[1];
 }
 
 /**

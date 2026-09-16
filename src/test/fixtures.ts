@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach } from 'vitest';
-import type { Cohort, StaffUser, Submission } from '@prisma/client';
+import type { Cohort, Prisma, StaffUser, Submission } from '@prisma/client';
 import { resetRateLimits } from '../api/middleware/rateLimit.ts';
 import { disconnectPrismaClient, getPrismaClient } from '../data/prismaClient.ts';
 import { resetDatabase } from './db.ts';
@@ -102,8 +102,31 @@ export type SubmissionOverrides = Partial<
     // has to be able to state what the student wrote, and the original is a column of its own
     // (Section 6) rather than a field inside `answers`.
     | 'problemsOpenTextOriginal'
+    // The scored and derived columns, for the same reason: the staff dashboard (E8) aggregates over
+    // these rather than re-scoring `answers`, and a test of it has to be able to state them
+    // directly. Also written only by finalization and by the background worker, never by a student.
+    | 'grammarScore'
+    | 'vocabularyScore'
+    | 'readingScore'
+    | 'writingStatus'
+    | 'writingOverallScore'
+    | 'problemsTextStatus'
+    | 'submittedAt'
   >
->;
+> & {
+  /**
+   * The JSON columns, typed as *write* inputs rather than read from `Submission`.
+   *
+   * Prisma separates the two: a read value may be `null`, while a write has to spell that
+   * `Prisma.JsonNull`. Taking these from the read model would make every fixture call site that
+   * passes an object fail to compile against `create()`, for a distinction that is Prisma's and not
+   * the test's. Tests hand these plain objects, so they are typed as what `create()` accepts.
+   */
+  writingCriteriaScores?: Prisma.InputJsonValue;
+  writingFeedback?: Prisma.InputJsonValue;
+  problemsLikertAnswers?: Prisma.InputJsonValue;
+  problemsTextDerived?: Prisma.InputJsonValue;
+};
 
 /**
  * Creates a draft submission for a cohort.
@@ -129,6 +152,33 @@ export async function createSubmission(
       contentVersion: overrides.contentVersion ?? 'v1',
       answers: overrides.answers ?? {},
       problemsOpenTextOriginal: overrides.problemsOpenTextOriginal ?? null,
+      ...scoredColumns(overrides),
     },
   });
+}
+
+/**
+ * The scored and derived columns, spread in only when the caller named them.
+ *
+ * Spread conditionally rather than defaulted, because the schema already carries the right default
+ * for each — a draft's scores are null and its processing statuses are `not_applicable` — and
+ * writing `null` over `not_applicable` would make a fixture-built draft differ from a real one in a
+ * way every processing-status test would then have to know about.
+ *
+ * Destructured by hand rather than filtered by key, so that adding a column to the list above is a
+ * compile error here until it is either handled or explicitly passed through.
+ */
+function scoredColumns(overrides: SubmissionOverrides) {
+  const {
+    rollNumberRaw: _rollNumberRaw,
+    rollNumberNormalized: _rollNumberNormalized,
+    studentName: _studentName,
+    status: _status,
+    contentVersion: _contentVersion,
+    answers: _answers,
+    problemsOpenTextOriginal: _problemsOpenTextOriginal,
+    ...scored
+  } = overrides;
+
+  return scored;
 }

@@ -570,3 +570,187 @@ button.secondary:hover:not(:disabled) {
 .correction-fixed {
   font-weight: 500;
 }
+
+/* ---------------------------------------------------------------- staff views */
+
+/*
+ * The Student Problems panel (T8.2.2) is where FR-PROB-011 has to hold visually: derived data must
+ * not read as the student's own words. A label alone is satisfied by a heading a reader skips, so
+ * the original is set as a quotation and the derived block is given its own border, background, and
+ * an explicit tag. The two must not be mistakable at a glance, which is the whole requirement.
+ */
+.original-text {
+  margin: 0.5rem 0 0.5rem 0;
+  padding: 0 0 0 0.9rem;
+  border-left: 3px solid var(--line);
+  color: var(--ink);
+  font-style: italic;
+  white-space: pre-wrap;
+}
+
+.derived {
+  margin-top: 1.5rem;
+  padding: 0.9rem 1rem 1rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--page);
+}
+
+.derived-head {
+  margin: 0 0 0.4rem;
+}
+
+.derived-tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+}
+
+.derived-text--open {
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  background: var(--paper);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+}
+
+.problem-list,
+.category-list,
+.metric-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.problem,
+.category {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 0.7rem;
+  margin-top: 0.7rem;
+}
+
+.problem:first-child,
+.category:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.problem-statement {
+  margin: 0;
+}
+
+.problem-answer,
+.category-label {
+  margin: 0.25rem 0 0;
+}
+
+.category-label {
+  font-weight: 500;
+}
+
+/*
+ * The dashboard's counters and distributions (T8.3.1). A definition-style row of label and value,
+ * plus a bar drawn with a width percentage — hand-written markup on purpose: FR-STAFF-012 asks for
+ * a simple internal view, and Section 2 pins no charting library.
+ */
+.metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+.metric:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.metric-label {
+  color: var(--ink-soft);
+}
+
+.metric-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr 3rem;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
+.bar-label {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.bar-track {
+  background: var(--line-soft);
+  border-radius: 999px;
+  height: 0.7rem;
+  overflow: hidden;
+}
+
+.bar-fill {
+  display: block;
+  background: var(--accent);
+  height: 100%;
+  border-radius: 999px;
+  min-width: 0;
+}
+
+.bar-value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/*
+ * A `select` styled to match the text inputs, for the cohort filter (FR-STAFF-009). Deliberately
+ * minimal: the native control keeps its own keyboard and mobile behaviour, which a hand-built
+ * dropdown would have to reimplement badly.
+ */
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.filter-row label {
+  font-weight: 500;
+}
+
+.filter-row select {
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  min-width: 12rem;
+}
+
+.export-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+

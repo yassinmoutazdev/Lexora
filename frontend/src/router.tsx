@@ -62,9 +62,59 @@ export function usePathname(): string {
   return pathname;
 }
 
-type LinkProps = { to: string } & AnchorHTMLAttributes<HTMLAnchorElement>;
-
 /**
+ * Matches a route pattern against a pathname, returning its parameters — or null.
+ *
+ * ## Why this exists at all
+ *
+ * `App.tsx` reads its route table as a `switch` on the exact pathname, which is enough for six of
+ * Section 9's seven paths and cannot express the seventh: `/staff/submissions/:submissionId` carries
+ * a submission id, and a `switch` compares whole strings. This is the smallest thing that closes
+ * that gap — a segment-by-segment comparison, no dependency, no second routing mechanism.
+ *
+ * ## Why it is not a full router
+ *
+ * It supports exactly the syntax Section 9's table uses: literal segments and `:name` parameters.
+ * There are no wildcards, no optional segments, no nested patterns, and no query parsing — adding
+ * any of those would be building the router this repository deliberately does not have, for a route
+ * table that is fixed at seven paths.
+ *
+ * A `:name` segment must match something non-empty: `/staff/submissions/` is not a submission id,
+ * and letting it through would produce a page that fetches an empty id and reports "not found" for
+ * a URL that was never a valid one.
+ *
+ * Parameters are decoded, so an id containing a character a browser percent-encodes still resolves
+ * to the value the server issued.
+ */
+export function matchPath(pattern: string, pathname: string): Record<string, string> | null {
+  const patternSegments = pattern.split('/');
+  const pathSegments = pathname.split('/');
+
+  // A different number of segments cannot match, and checking it first means the loop below can
+  // walk both arrays in step without guarding every lookup.
+  if (patternSegments.length !== pathSegments.length) return null;
+
+  const params: Record<string, string> = {};
+
+  for (let index = 0; index < patternSegments.length; index += 1) {
+    const expected = patternSegments[index];
+    const actual = pathSegments[index];
+
+    if (expected === undefined || actual === undefined) return null;
+
+    if (expected.startsWith(':')) {
+      if (actual.length === 0) return null;
+      params[expected.slice(1)] = decodeURIComponent(actual);
+      continue;
+    }
+
+    if (expected !== actual) return null;
+  }
+
+  return params;
+}
+
+type LinkProps = { to: string } & AnchorHTMLAttributes<HTMLAnchorElement>;/**
  * An internal link.
  *
  * Renders a real `<a href>`, so the path is visible in the status bar, openable in a new tab, and

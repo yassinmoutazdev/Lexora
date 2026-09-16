@@ -1,7 +1,10 @@
+import { DashboardPage } from './pages/staff/DashboardPage';
+import { LoginPage } from './pages/staff/LoginPage';
+import { SubmissionDetailPage } from './pages/staff/SubmissionDetailPage';
 import { AssessmentPage } from './pages/student/AssessmentPage';
 import { EntryPage } from './pages/student/EntryPage';
 import { ReportPage } from './pages/student/ReportPage';
-import { Link, usePathname } from './router';
+import { Link, matchPath, usePathname } from './router';
 
 /**
  * The application root, and the route table (ARCHITECTURE Section 4 — `App.tsx # Router`).
@@ -24,6 +27,16 @@ import { Link, usePathname } from './router';
 export function App() {
   const pathname = usePathname();
 
+  // The one route Section 9's table fixes that a `switch` cannot express: it carries a submission
+  // id, and a `switch` compares whole strings. Tried before the switch rather than inside it,
+  // because a `case` cannot match a family of paths — and left as one explicit pattern rather than a
+  // routing table, because there is exactly one such route and a table for one entry would be a
+  // structure to maintain that answers nothing.
+  const submissionDetail = matchPath('/staff/submissions/:submissionId', pathname);
+  if (submissionDetail?.submissionId !== undefined) {
+    return <SubmissionDetailPage submissionId={submissionDetail.submissionId} />;
+  }
+
   switch (pathname) {
     case '/':
       return <EntryPage />;
@@ -35,7 +48,10 @@ export function App() {
       return <ReportPage />;
 
     case '/staff/login':
-      return <NotBuiltYet title="Staff login" task="T8.3.2" />;
+      return <LoginPage />;
+
+    case '/staff/dashboard':
+      return <DashboardPage />;
 
     default:
       return <NotFound pathname={pathname} />;

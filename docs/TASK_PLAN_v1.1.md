@@ -564,6 +564,12 @@ Each Epic is one session. The following applies to every Epic and is not repeate
 
 **Rationale:** Builds the internal analysis views and export on top of the now-complete submission data model, letting staff view aggregate patterns and individual records. Reuses the staff-session infrastructure from E3.
 
+**Execution order:** `T8.3.2` (staff `LoginPage`) is built **first**, then the remaining tasks in the order listed below.
+
+The reason is that three later tasks carry "manual verification" that is otherwise unreachable: `T8.2.2` and `T8.3.1` are staff pages behind a staff session, and `T8.4.2`'s export control lives on the dashboard. Section 9's route table puts every staff page behind login, and no staff page exists yet — so without a login page the verification step for those tasks can be run only at the API level, which is not what their `Output:` conditions ask for. Doing `T8.3.2` first makes the rest of the Epic checkable in the way the plan intends.
+
+Task **identifiers are unchanged**. `T8.3.2` stays `T8.3.2` and stays listed under Feature 8.3, where it belongs by subject; only the order of execution differs, and it differs explicitly rather than by a session quietly reordering work. `frontend/src/App.tsx` already names this task at the `/staff/login` route.
+
 **What Done Means:**
 - The dashboard shows accurate counts/distributions/patterns for seeded fixture data, filterable by cohort.
 - The individual submission view is staff-session-gated and logs each access.
@@ -585,40 +591,40 @@ Each Epic is one session. The following applies to every Epic and is not repeate
 
 ### Feature 8.1 — Dashboard Aggregate Queries
 
-- [ ] T8.1.1 — Implement `src/domain/staff/DashboardService.ts`: submission counts + completion status, overall/section-level score distributions (Grammar/Vocabulary/Reading/Writing comparison), most common Student Problems responses, cohort filter.
+- [x] T8.1.1 — Implement `src/domain/staff/DashboardService.ts`: submission counts + completion status, overall/section-level score distributions (Grammar/Vocabulary/Reading/Writing comparison), most common Student Problems responses, cohort filter.
       Ref: PRD Section 9.7 (FR-STAFF-004/005/006/008/009); ARCHITECTURE Section 14 (Dashboard aggregation — plain SQL, no caching), Section 18
       Output: src/domain/staff/DashboardService.ts + test · integration test: correct counts/averages against seeded fixture data, including cohort filtering
-- [ ] T8.1.2 — Implement the Basic/Intermediate/Upper-intermediate difficulty-level comparison as a conditional capability that only renders when the underlying content metadata/question distribution supports a meaningful comparison.
+- [x] T8.1.2 — Implement the Basic/Intermediate/Upper-intermediate difficulty-level comparison as a conditional capability that only renders when the underlying content metadata/question distribution supports a meaningful comparison.
       Ref: PRD Section 9.7 (FR-STAFF-007)
       Output: DashboardService difficulty-level query · test confirms the comparison is omitted rather than shown misleadingly when metadata is insufficient
-- [ ] T8.1.3 — Implement `GET /api/staff/dashboard`.
+- [x] T8.1.3 — Implement `GET /api/staff/dashboard`.
       Ref: ARCHITECTURE Section 10 (API contract — dashboard)
       Output: src/api/staff.routes.ts (GET dashboard) · integration test: an authenticated staff session receives the aggregate payload; an unauthenticated request is rejected
 
 ### Feature 8.2 — Individual Submission Access
 
-- [ ] T8.2.1 — Implement `GET /api/staff/submissions/:id`, returning full submission detail (answers, scores, writing evaluation, Student Problems original + derived data) and emitting the structured pino staff-access log line.
+- [x] T8.2.1 — Implement `GET /api/staff/submissions/:id`, returning full submission detail (answers, scores, writing evaluation, Student Problems original + derived data) and emitting the structured pino staff-access log line.
       Ref: PRD Section 9.7 (FR-STAFF-010), Section 15 (NFR-PRIV-004); ARCHITECTURE Section 13 (Staff data access is logged), Section 18
       Output: src/api/staff.routes.ts (GET submissions/:id) · integration test: response includes the expected fields; log output contains `{ event: 'staff_submission_access', staffUserId, submissionId, timestamp, action: 'view' }`
-- [ ] T8.2.2 — Build `SubmissionDetailPage.tsx`, clearly labeling Student Problems AI-derived categories/normalized text as derived, not the student's original words.
+- [x] T8.2.2 — Build `SubmissionDetailPage.tsx`, clearly labeling Student Problems AI-derived categories/normalized text as derived, not the student's original words.
       Ref: PRD Section 9.5 (FR-PROB-011), Section 9.7 (FR-STAFF-010)
       Output: frontend/src/pages/staff/SubmissionDetailPage.tsx · manual verification: derived data is visually distinguished from the original response
 
 ### Feature 8.3 — Dashboard Frontend
 
-- [ ] T8.3.1 — Build `DashboardPage.tsx`: fetches aggregate data on load and on cohort-filter change; renders submission counts/completion, score distributions, and Student Problems patterns.
+- [x] T8.3.1 — Build `DashboardPage.tsx`: fetches aggregate data on load and on cohort-filter change; renders submission counts/completion, score distributions, and Student Problems patterns.
       Ref: PRD Section 9.7 (FR-STAFF-004/005/006/008/009/012); ARCHITECTURE Section 5 (DashboardPage)
       Output: frontend/src/pages/staff/DashboardPage.tsx · manual verification: changing the filter re-fetches and updates the displayed metrics
-- [ ] T8.3.2 — Build staff `LoginPage.tsx`.
+- [x] T8.3.2 — Build staff `LoginPage.tsx`.
       Ref: PRD Section 9.7 (FR-STAFF-001)
       Output: frontend/src/pages/staff/LoginPage.tsx · manual verification: valid login routes to the dashboard; invalid login shows a generic error
 
 ### Feature 8.4 — CSV Export
 
-- [ ] T8.4.1 — Implement `GET /api/staff/export.csv` using `csv-stringify` for a streamed export, optionally filtered by cohort, covering the full submission dataset needed for external analysis.
+- [x] T8.4.1 — Implement `GET /api/staff/export.csv` using `csv-stringify` for a streamed export, optionally filtered by cohort, covering the full submission dataset needed for external analysis.
       Ref: PRD Section 9.7 (FR-STAFF-011), Section 4 (G5); ARCHITECTURE Section 2 (csv-stringify), Section 10 (API contract — export)
       Output: src/api/staff.routes.ts (GET export.csv) · integration test: output includes the expected columns/rows for a seeded dataset and respects the cohort filter
-- [ ] T8.4.2 — Add a staff-facing export trigger in `DashboardPage.tsx`.
+- [x] T8.4.2 — Add a staff-facing export trigger in `DashboardPage.tsx`.
       Ref: PRD Section 8.3 (Staff journey step 4)
       Output: DashboardPage.tsx export control · manual verification: clicking export downloads a CSV
 
