@@ -2,6 +2,7 @@ import express from 'express';
 import type { Express } from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
+import { createApp } from '../app.ts';
 import { hashPassword } from '../auth/passwordHasher.ts';
 import { createCohort, createStaffUser, useCleanTestDatabase } from '../test/fixtures.ts';
 import { STUDENT_VERIFY_RATE_LIMIT, STAFF_LOGIN_RATE_LIMIT } from './middleware/rateLimit.ts';
@@ -80,5 +81,38 @@ describe('rate limiting is applied to the public endpoints', () => {
       .expect(429);
 
     expect(blocked.body).toEqual({ error: 'Too many attempts — please try again later' });
+  });
+
+  it('keys the limiter on the real client address the deployment proxy reports', async () => {
+    // The assembled application, not a throwaway one, so this covers `app.set('trust proxy', 1)`
+    // in `src/app.ts` rather than the middleware alone. Without that setting `req.ip` is the
+    // proxy's address and every student shares one allowance — a whole computer lab locking itself
+    // out is the failure mode, so the second address having its own budget is the point.
+    await createCohort({ code: 'PILOT-2026' });
+    const app = createApp();
+
+    const firstAddress = '203.0.113.10';
+    const secondAddress = '203.0.113.11';
+
+    for (let attempt = 1; attempt <= STUDENT_VERIFY_RATE_LIMIT; attempt += 1) {
+      await request(app)
+        .post('/api/session/student-verify')
+        .set('X-Forwarded-For', firstAddress)
+        .send({})
+        .expect(400);
+    }
+
+    await request(app)
+      .post('/api/session/student-verify')
+      .set('X-Forwarded-For', firstAddress)
+      .send({})
+      .expect(429);
+
+    // A different address is unaffected, and a real request from it is served.
+    await request(app)
+      .post('/api/session/student-verify')
+      .set('X-Forwarded-For', secondAddress)
+      .send({ cohortCode: 'PILOT-2026', rollNumber: '2021-001', studentName: 'Alice Example' })
+      .expect(200);
   });
 });

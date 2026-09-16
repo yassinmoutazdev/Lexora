@@ -4,6 +4,7 @@ import express from 'express';
 import type { Express } from 'express';
 import { sessionRouter } from './api/session.routes.ts';
 import { staffRouter } from './api/staff.routes.ts';
+import { studentRouter } from './api/student.routes.ts';
 import { env, REPO_ROOT } from './config/env.ts';
 
 /** Vite's build output, produced by `npm run build:frontend`. */
@@ -47,6 +48,21 @@ function mountFrontendBundle(app: Express): void {
 export function createApp(): Express {
   const app = express();
 
+  // Render terminates TLS at its proxy, so nothing Express reads from the socket describes the
+  // real request: without this, `req.protocol` reports `http` on an HTTPS request and `req.ip` is
+  // the proxy's address. Both matter, and both fail silently if this is missing —
+  // `src/auth/session.ts` marks the session cookies Secure from `req.protocol`, and
+  // `src/api/middleware/rateLimit.ts` keys on `req.ip`, so an entire cohort would share one
+  // allowance while every cookie quietly lost its Secure attribute.
+  //
+  // Must be `1`, never `true`. `1` trusts exactly one hop, so `req.ip` is the address Render's
+  // proxy saw. `true` trusts every hop and takes the left-most entry in `X-Forwarded-For`, which a
+  // student can set — that would let them reset their own rate-limit budget with each request.
+  //
+  // Assumes a proxy is always in front, which ARCHITECTURE Section 16 fixes as Render. An instance
+  // exposed directly would need `false`, since the header would then be client-controlled.
+  app.set('trust proxy', 1);
+
   // Parses JSON bodies. It does not trust them — every API boundary validates its body against a
   // zod schema via validateBody (T3.2.3) before the payload reaches a domain service.
   app.use(express.json());
@@ -56,6 +72,7 @@ export function createApp(): Express {
   }
 
   app.use('/api/session', sessionRouter);
+  app.use('/api/student', studentRouter);
   app.use('/api/staff', staffRouter);
 
   return app;

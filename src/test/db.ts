@@ -58,7 +58,12 @@ export function hasTestDatabase(): boolean {
  * every migration still needs applying.
  *
  * This is fixed SQL with no interpolation — no value from a request or a test ever reaches the
- * string. It is the one place in the codebase that issues raw SQL; see T9.3.3's audit.
+ * string.
+ *
+ * It is not the only raw SQL in the codebase: `SubmissionRepository.mergeSectionAnswers` (T4.2.1)
+ * issues a parameterized `$executeRaw`, because Prisma exposes no operator for Postgres' `jsonb ||`
+ * that Section 12's section-level autosave requires. Both are parameterized; T9.3.3's audit covers
+ * the set, and this comment no longer claims to be a set of one.
  */
 export const TRUNCATE_ALL_TABLES = `
 DO $$

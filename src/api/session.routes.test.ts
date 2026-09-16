@@ -53,10 +53,21 @@ function createTestApp(): Express {
 
 /** Every cookie name on a response, sorted. */
 function cookieNames(response: request.Response): string[] {
-  const header = response.headers['set-cookie'];
-  const headers = !header ? [] : Array.isArray(header) ? header : [header];
+  return setCookieHeaders(response)
+    .map((value) => value.split('=')[0] ?? '')
+    .sort();
+}
 
-  return headers.map((value) => value.split('=')[0] ?? '').sort();
+function setCookieHeaders(response: request.Response): string[] {
+  const header = response.headers['set-cookie'];
+  if (!header) return [];
+
+  return Array.isArray(header) ? header : [header];
+}
+
+/** The `Set-Cookie` header for a named cookie, if the response carried one. */
+function setCookieFor(response: request.Response, name: string): string | undefined {
+  return setCookieHeaders(response).find((value) => value.startsWith(`${name}=`));
 }
 
 useCleanTestDatabase();
@@ -275,5 +286,29 @@ describe('app assembly', () => {
 
     expect(response.body).toEqual({ status: 'draft' });
     expect(cookieNames(response)).toContain(STUDENT_SESSION_COOKIE);
+  });
+
+  it('marks the session cookie Secure only when the deployment proxy reports TLS', async () => {
+    // `src/app.ts` sets `trust proxy: 1`, which is what makes `req.protocol` report the original
+    // scheme rather than the proxy's plain-HTTP hop. Both halves matter: without the first, the
+    // Secure attribute Section 13 requires never appears in production; without the second
+    // holding, the same setting would break local development over http://localhost.
+    await createCohort({ code: 'PILOT-2026' });
+    const app = createApp();
+
+    const overTls = await request(app)
+      .post('/api/session/student-verify')
+      .set('X-Forwarded-Proto', 'https')
+      .send({ cohortCode: 'PILOT-2026', rollNumber: '2021-001', studentName: 'Alice Example' })
+      .expect(200);
+
+    expect(setCookieFor(overTls, STUDENT_SESSION_COOKIE)).toContain('; secure');
+
+    const direct = await request(app)
+      .post('/api/session/student-verify')
+      .send({ cohortCode: 'PILOT-2026', rollNumber: '2021-002', studentName: 'Bob Example' })
+      .expect(200);
+
+    expect(setCookieFor(direct, STUDENT_SESSION_COOKIE)).not.toContain('secure');
   });
 });

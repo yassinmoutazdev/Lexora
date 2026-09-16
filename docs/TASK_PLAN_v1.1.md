@@ -340,31 +340,31 @@ Each Epic is one session. The following applies to every Epic and is not repeate
 
 ### Feature 4.1 — Draft Retrieval
 
-- [ ] T4.1.1 — Implement `GET /api/student/draft`: returns the active session's current answers plus the content for the draft's `contentVersion`.
+- [x] T4.1.1 — Implement `GET /api/student/draft`: returns the active session's current answers plus the content for the draft's `contentVersion`.
       Ref: ARCHITECTURE Section 10 (API contract — GET draft), Section 5 (AssessmentPage data fetch)
       Output: src/api/student.routes.ts (GET draft) · integration test: returns saved answers and matching versioned content for an authenticated student session
 
 ### Feature 4.2 — Section-Level Autosave
 
-- [ ] T4.2.1 — Implement `PATCH /api/student/draft` using the atomic `answers = answers || jsonb_build_object($section, $sectionAnswers)` merge; reject the write when `status != 'draft'`.
+- [x] T4.2.1 — Implement `PATCH /api/student/draft` using the atomic `answers = answers || jsonb_build_object($section, $sectionAnswers)` merge; reject the write when `status != 'draft'`.
       Ref: ARCHITECTURE Section 12 (Section-level autosave), Section 6 (Transaction boundaries #2)
       Output: src/api/student.routes.ts (PATCH draft), src/data/SubmissionRepository.ts (section merge method) · integration test: a PATCH to section A leaves section B untouched; two concurrent PATCHes to different sections both persist; a PATCH to a submitted record is rejected
-- [ ] T4.2.2 — Define zod validation schemas for each section's answer shape and apply them via `validateBody` on the PATCH route.
+- [x] T4.2.2 — Define zod validation schemas for each section's answer shape and apply them via `validateBody` on the PATCH route.
       Ref: ARCHITECTURE Section 10 (validateBody), PRD Section 9.2 (FR-ASSESS-002)
       Output: src/shared/types (section answer schemas) · a malformed section payload returns 400
 
 ### Feature 4.3 — Assessment Frontend
 
-- [ ] T4.3.1 — Build `EntryPage.tsx`: cohort code + roll number + name form, submits to `student-verify`, routes to `/assessment` for a fresh draft or `/report` for an existing submission, with a small, clearly labeled Staff login link.
+- [x] T4.3.1 — Build `EntryPage.tsx`: cohort code + roll number + name form, submits to `student-verify`, routes to `/assessment` for a fresh draft or `/report` for an existing submission, with a small, clearly labeled Staff login link.
       Ref: PRD Section 8.1 (Student journey steps 1–6), Section 9.1 (FR-STU-008); ARCHITECTURE Section 4, Section 9
       Output: frontend/src/pages/student/EntryPage.tsx · manual verification: valid identity routes correctly; invalid identity shows the generic error · the Staff login link points at the `/staff/login` route (the page itself is built in T8.3.2)
-- [ ] T4.3.2 — Build `AssessmentPage.tsx`: section-by-section navigation (Grammar → Vocabulary → Reading → Writing → Student Problems) with backward navigation/review allowed and no time limit.
+- [x] T4.3.2 — Build `AssessmentPage.tsx`: section-by-section navigation (Grammar → Vocabulary → Reading → Writing → Student Problems) with backward navigation/review allowed and no time limit.
       Ref: PRD Section 9.2 (FR-ASSESS-001/003/004/005), Section 10 (Assessment Structure)
       Output: frontend/src/pages/student/AssessmentPage.tsx · manual verification: student can navigate backward and forward without losing entered answers
-- [ ] T4.3.3 — Implement `frontend/src/hooks/useAutosave.ts`: debounces edits (~1.5s idle, or on blur/section navigation) and PATCHes only the current section; exposes an `idle | saving | saved | error` status.
+- [x] T4.3.3 — Implement `frontend/src/hooks/useAutosave.ts`: debounces edits (~1.5s idle, or on blur/section navigation) and PATCHes only the current section; exposes an `idle | saving | saved | error` status.
       Ref: ARCHITECTURE Section 5 (useAutosave), Section 12
       Output: frontend/src/hooks/useAutosave.ts · manual verification: editing one section triggers no write to any other section; the save-status indicator updates correctly
-- [ ] T4.3.4 — Build the Student Problems section UI: the five-point agreement scale for every statement, plus the open-ended field accepting English **or** Arabic input (correct encoding and text direction). Show the required privacy notice ahead of the open-ended question, and gate the submit control so every required section is complete while a blank open-text field never blocks submission (the server-authoritative completeness check lives in T5.2.1).
+- [x] T4.3.4 — Build the Student Problems section UI: the five-point agreement scale for every statement, plus the open-ended field accepting English **or** Arabic input (correct encoding and text direction). Show the required privacy notice ahead of the open-ended question, and gate the submit control so every required section is complete while a blank open-text field never blocks submission (the server-authoritative completeness check lives in T5.2.1).
       Ref: PRD Section 9.5 (FR-PROB-001/002/003/004/014, NFR-PRIV-009), Section 9.2 (FR-ASSESS-007), Section 18 (NFR-GEN-004 bilingual input)
       Output: Student Problems section UI · manual verification: notice is shown; Likert responses and Arabic open text persist and render correctly; a blank open-text field does not block submission; a blank required section does
 
@@ -665,8 +665,9 @@ Each Epic is one session. The following applies to every Epic and is not repeate
 ### Feature 9.4 — Deployment Configuration
 
 - [ ] T9.4.1 — Configure the Render production deployment: build command (`npm ci && npm run build`), start command (`node dist/server.js`), and environment variables per Section 16's table.
-      Ref: ARCHITECTURE Section 16 (Production deployment, Environment variables)
-      Output: deployment configuration (render.yaml or documented dashboard settings) · a fresh deploy serves the built frontend and API from one process
+      Carry-over from E3, verify on the real deployment: `app.set('trust proxy', 1)` in `src/app.ts`. Render terminates TLS at its proxy, so without it `req.protocol` reports `http` and `req.ip` is the proxy's address — the session cookies silently lose the `Secure` attribute Section 13 requires, and every student shares a single rate-limit allowance. Confirm on the live instance that a login sets a `Secure` cookie and that two different `X-Forwarded-For` values get separate rate-limit budgets. It must remain `1`, never `true`: `true` trusts a client-supplied header, which would let a student reset their own budget with every request. See `src/auth/session.ts` and `src/api/middleware/rateLimit.ts`.
+      Ref: ARCHITECTURE Section 16 (Production deployment, Environment variables), Section 13 (Sessions, Rate limiting)
+      Output: deployment configuration (render.yaml or documented dashboard settings) · a fresh deploy serves the built frontend and API from one process · a live check confirming a `Secure` session cookie and per-address rate-limit budgets
 - [ ] T9.4.2 — Confirm `prisma migrate deploy` runs as part of the build/release step, before the new instance serves traffic.
       Ref: ARCHITECTURE Section 16 (Database migrations)
       Output: build/release script · the deploy log shows the migration step completing before the server starts

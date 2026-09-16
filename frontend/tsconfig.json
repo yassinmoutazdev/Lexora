@@ -7,6 +7,12 @@
 
     "jsx": "react-jsx",
 
+    // Vite's own ambient types, for the side-effect import of styles.css in main.tsx and for
+    // import.meta.env. Scoped to this project so the backend program is unaffected; `react` and
+    // `react-dom` types are unaffected either way, since those resolve through node_modules rather
+    // than through automatic @types inclusion.
+    "types": ["vite/client"],
+
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -17,9 +23,14 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
 
-    // Vite bundles the frontend, so imports stay extensionless here — unlike src/, which runs
-    // through Node's native type-stripping and needs explicit .ts extensions.
-    "allowImportingTsExtensions": false,
+    // Vite bundles the frontend, so frontend-local imports stay extensionless — unlike src/, which
+    // runs through Node's native type-stripping and needs explicit .ts extensions on every relative
+    // import. This flag *permits* the extension rather than requiring it, which is what lets the
+    // frontend import `src/shared/types/*` (T4.2.2): those modules are part of the backend's
+    // program too, so their own relative imports must carry `.ts` — and a `.ts` import inside an
+    // imported file is checked against this config, not the root one. Legal here only because this
+    // project never emits: Vite does the emitting, and `noEmit` is set below.
+    "allowImportingTsExtensions": true,
     "noEmit": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true

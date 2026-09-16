@@ -31,8 +31,15 @@ import { getStaffSession, getStudentSession } from '../../auth/session.ts';
 /** Which session a guard demands. */
 export type SessionRequirement = 'staff' | 'student';
 
-/** The message every refusal carries. Deliberately says nothing about which session was expected. */
-const UNAUTHORIZED_MESSAGE = 'Authentication required';
+/**
+ * The message every refusal carries. Deliberately says nothing about which session was expected.
+ *
+ * Exported because a route can legitimately have to answer 401 for a reason the guard cannot see —
+ * a student session naming a submission row that no longer exists, for instance. The remedy is
+ * identical (re-verify identity and come back), so it is reported identically, from one definition
+ * rather than a second copy of the string that could drift.
+ */
+export const UNAUTHORIZED_MESSAGE = 'Authentication required';
 
 /**
  * Builds a guard that rejects any request not carrying a live session of `requirement`.
