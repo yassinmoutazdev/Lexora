@@ -1,0 +1,108 @@
+{
+  "section": "studentProblems",
+  "title": "Student Problems",
+  "contentStatus": "provisional",
+  "statusNote": "The five-point agreement scale is approved (PRD FR-PROB-002) and is therefore final. The statement set and the area grouping are proposed only — PRD Section 23.1 item 4 leaves the final ~15-20 statements and their grouping to the team. The student-facing privacy notice wording is PRD Section 23.1 item 5 and is also provisional.",
+  "instructions": "The statements below describe some common difficulties students meet when learning English. For each statement, choose the response that best describes your own experience. There are no right or wrong answers, and your responses do not affect your English score.",
+  "scale": [
+    { "value": 1, "label": "Strongly disagree" },
+    { "value": 2, "label": "Disagree" },
+    { "value": 3, "label": "Neutral" },
+    { "value": 4, "label": "Agree" },
+    { "value": 5, "label": "Strongly agree" }
+  ],
+  "areas": [
+    { "id": "speaking_confidence", "label": "Speaking and confidence" },
+    { "id": "listening", "label": "Listening" },
+    { "id": "vocabulary", "label": "Vocabulary" },
+    { "id": "grammar", "label": "Grammar" },
+    { "id": "reading", "label": "Reading" },
+    { "id": "writing", "label": "Writing" },
+    { "id": "learning_habits", "label": "Learning habits and exposure" }
+  ],
+  "statements": [
+    {
+      "id": "sp-01",
+      "area": "speaking_confidence",
+      "text": "I feel confident when I speak English around other people."
+    },
+    {
+      "id": "sp-02",
+      "area": "speaking_confidence",
+      "text": "I worry about making mistakes when I speak English."
+    },
+    {
+      "id": "sp-03",
+      "area": "speaking_confidence",
+      "text": "I find it difficult to speak English without preparing what I will say first."
+    },
+    {
+      "id": "sp-04",
+      "area": "listening",
+      "text": "I find it difficult to understand English when people speak quickly."
+    },
+    {
+      "id": "sp-05",
+      "area": "listening",
+      "text": "I need subtitles to follow an English film or video."
+    },
+    {
+      "id": "sp-06",
+      "area": "vocabulary",
+      "text": "I often cannot find the right English word while I am speaking."
+    },
+    {
+      "id": "sp-07",
+      "area": "vocabulary",
+      "text": "I forget English words that I have studied before."
+    },
+    {
+      "id": "sp-08",
+      "area": "grammar",
+      "text": "I find English grammar rules difficult to use when I write."
+    },
+    {
+      "id": "sp-09",
+      "area": "grammar",
+      "text": "I translate from Arabic into English in my head before I form a sentence."
+    },
+    {
+      "id": "sp-10",
+      "area": "reading",
+      "text": "I find academic English texts difficult to understand."
+    },
+    {
+      "id": "sp-11",
+      "area": "reading",
+      "text": "I read English slowly because I stop at words I do not know."
+    },
+    {
+      "id": "sp-12",
+      "area": "writing",
+      "text": "I find it difficult to organise my ideas when I write in English."
+    },
+    {
+      "id": "sp-13",
+      "area": "writing",
+      "text": "I am not confident that my written English is grammatically correct."
+    },
+    {
+      "id": "sp-14",
+      "area": "learning_habits",
+      "text": "I have few opportunities to practise English outside class."
+    },
+    {
+      "id": "sp-15",
+      "area": "learning_habits",
+      "text": "I rarely read or listen to English outside my coursework."
+    }
+  ],
+  "openTextQuestion": {
+    "id": "student-problems-open-text",
+    "prompt": "Is there anything else that makes learning English difficult for you? Please describe it in your own words. You may write in English or in Arabic.",
+    "required": false,
+    "languages": ["en", "ar"],
+    "privacyNotice": "Please do not include other people's names, phone numbers, passwords, or similar private details in your answer.",
+    "privacyNoticeHeading": "Before you answer"
+  }
+}

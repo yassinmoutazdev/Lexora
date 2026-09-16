@@ -1,0 +1,13 @@
+{
+  "section": "writing",
+  "title": "Writing",
+  "contentStatus": "provisional",
+  "statusNote": "PRD Section 23.1 item 2 states the final free-writing task prompt has not been written. This is a development task of the same shape as the approved one (a single open-ended free-writing task, FR-WRITE-001/002) and must be replaced with the team's approved prompt before the pilot.",
+  "instructions": "Write your answer in English. There is no time limit, and you may plan your ideas before you begin.",
+  "task": {
+    "id": "writing-task-1",
+    "genre": "opinion essay",
+    "prompt": "Some students believe that university courses should focus only on subjects directly related to their future job. Others believe students should also study a wider range of subjects. Write an essay giving your opinion on this issue. Support your view with reasons and examples from your own experience.",
+    "guidance": "Write in clear paragraphs. State your position, give reasons for it, and support each reason with an example. Aim for a well-organised answer of roughly 200 to 250 words; there is no penalty for writing more or less than this."
+  }
+}

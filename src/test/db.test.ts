@@ -83,8 +83,11 @@ describe('integration test harness', () => {
   });
 
   describe('schemaExists', () => {
-    it('is false until E2 creates prisma/schema.prisma', () => {
-      expect(schemaExists()).toBe(false);
+    it('reports the real prisma/schema.prisma created in E2 (T2.1.1)', () => {
+      // This asserted `false` while E1 was the newest Epic; E2 created the schema, so the
+      // gate it guards — skipping migrations rather than failing on a missing schema file —
+      // is now open. The assertion is inverted rather than dropped so the check stays live.
+      expect(schemaExists()).toBe(true);
     });
   });
 });

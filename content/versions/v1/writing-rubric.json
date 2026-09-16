@@ -1,0 +1,55 @@
+{
+  "section": "writing",
+  "contentStatus": "provisional",
+  "statusNote": "The five criteria are approved (PRD FR-WRITE-009). The numeric weights are explicitly TBD in PRD Section 23.1 item 1 — they are set to equal weighting here so the scoring formula has a real, testable input, and they must be replaced by the team's confirmed weights before the pilot. Do not treat 20/20/20/20/20 as an approved rubric decision.",
+  "criteria": [
+    {
+      "key": "grammarAccuracy",
+      "label": "Grammar accuracy",
+      "description": "Control of grammatical structures: tense and aspect, agreement, articles, prepositions, clause construction. Consider both the frequency and the seriousness of errors."
+    },
+    {
+      "key": "vocabulary",
+      "label": "Vocabulary",
+      "description": "Range, precision, and appropriacy of word choice. Reward varied and accurate vocabulary; penalise repetition, misuse, and mother-tongue transfer that obscures meaning."
+    },
+    {
+      "key": "sentenceStructure",
+      "label": "Sentence structure",
+      "description": "Variety and correctness of sentence construction, including the use of subordinate clauses and the avoidance of run-on or fragmentary sentences."
+    },
+    {
+      "key": "coherence",
+      "label": "Coherence and organization",
+      "description": "Logical ordering of ideas, effective paragraphing, and the use of linking devices so the reader can follow the argument without effort."
+    },
+    {
+      "key": "taskCompletion",
+      "label": "Task completion",
+      "description": "Whether the response addresses the prompt, states a position where one is asked for, supports it with reasons and examples, and meets the expected length and register."
+    }
+  ],
+  "weights": {
+    "grammarAccuracy": 20,
+    "vocabulary": 20,
+    "sentenceStructure": 20,
+    "coherence": 20,
+    "taskCompletion": 20
+  },
+  "scoreRange": {
+    "min": 0,
+    "max": 100
+  },
+  "instructions": "You are evaluating a single piece of English free writing produced by a university student who is a learner of English. Assess the response against exactly the five criteria listed below, and against nothing else.\n\nScore each criterion on a 0-100 scale, where 0 means the criterion is entirely unmet and 100 means it is handled with complete competence for this level. Do not compute an overall score: the overall score is calculated separately by the application from your criterion scores. Do not average the criteria yourself.\n\nFor each criterion, give the numeric score and a short rationale that cites specific evidence from the response. Base every judgement only on the text you are given. Do not speculate about the student's identity, background, or ability beyond what this one response shows.\n\nCriteria:\n1. grammarAccuracy — Control of grammatical structures: tense and aspect, agreement, articles, prepositions, clause construction.\n2. vocabulary — Range, precision, and appropriacy of word choice.\n3. sentenceStructure — Variety and correctness of sentence construction.\n4. coherence — Logical ordering of ideas, paragraphing, and linking devices.\n5. taskCompletion — Whether the response addresses the prompt and supports its position with reasons and examples.\n\nReturn your assessment as a single JSON object and nothing else — no prose before or after it, and no markdown code fences.",
+  "outputRequirements": {
+    "criterionRationaleRequired": true,
+    "maxCorrections": 5,
+    "fields": {
+      "criteriaScores": "One entry per criterion key, each with a 0-100 score and a short rationale citing evidence from the response.",
+      "strengths": "A short list of what the response does well.",
+      "weaknesses": "A short list of the most important weaknesses.",
+      "corrections": "At most five high-value corrections, each with the original wording, the corrected wording, and a brief explanation.",
+      "suggestions": "A short list of practical suggestions for improvement."
+    }
+  }
+}

@@ -1,0 +1,153 @@
+{
+  "section": "vocabulary",
+  "title": "Vocabulary",
+  "contentStatus": "provisional",
+  "statusNote": "Structure is final; the question set is a development set. PRD Section 23.1 item 3 leaves the final questions and difficulty distribution to the team.",
+  "instructions": "Choose the option that fits each sentence best.",
+  "questions": [
+    {
+      "id": "vocabulary-001",
+      "skill": "Collocation",
+      "difficulty": "basic",
+      "type": "multiple_choice",
+      "prompt": "Could you ___ a photo of us before we leave?",
+      "options": [
+        { "id": "a", "text": "do" },
+        { "id": "b", "text": "make" },
+        { "id": "c", "text": "take" },
+        { "id": "d", "text": "give" }
+      ],
+      "correctAnswer": "c",
+      "explanation": "'Take a photo' is the standard collocation. 'Make a photo' is a common transfer error from other languages, and 'do' and 'give' do not collocate with 'photo' in this sense.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-002",
+      "skill": "Antonyms",
+      "difficulty": "basic",
+      "type": "multiple_choice",
+      "prompt": "Which word is the opposite of 'expensive'?",
+      "options": [
+        { "id": "a", "text": "rich" },
+        { "id": "b", "text": "cheap" },
+        { "id": "c", "text": "costly" },
+        { "id": "d", "text": "valuable" }
+      ],
+      "correctAnswer": "b",
+      "explanation": "'Cheap' means low in price, the direct opposite of 'expensive'. 'Costly' is a synonym rather than an opposite, and 'rich' and 'valuable' describe different qualities.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-003",
+      "skill": "Occupations",
+      "difficulty": "basic",
+      "type": "multiple_choice",
+      "prompt": "He is a ___. He prepares meals in a restaurant.",
+      "options": [
+        { "id": "a", "text": "driver" },
+        { "id": "b", "text": "chef" },
+        { "id": "c", "text": "nurse" },
+        { "id": "d", "text": "farmer" }
+      ],
+      "correctAnswer": "b",
+      "explanation": "A 'chef' is a professional cook who prepares meals in a restaurant. The other options name unrelated occupations.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-004",
+      "skill": "Verb-noun collocation",
+      "difficulty": "intermediate",
+      "type": "multiple_choice",
+      "prompt": "The company plans to ___ a new product next spring.",
+      "options": [
+        { "id": "a", "text": "launch" },
+        { "id": "b", "text": "throw" },
+        { "id": "c", "text": "push" },
+        { "id": "d", "text": "rise" }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Companies 'launch' a product when they release it to the market. 'Rise' is intransitive and cannot take an object, and the other verbs do not collocate with 'product' in this sense.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-005",
+      "skill": "Word formation",
+      "difficulty": "intermediate",
+      "type": "multiple_choice",
+      "prompt": "Her ___ to the project was significant.",
+      "options": [
+        { "id": "a", "text": "contribution" },
+        { "id": "b", "text": "contributive" },
+        { "id": "c", "text": "contributing" },
+        { "id": "d", "text": "contributively" }
+      ],
+      "correctAnswer": "a",
+      "explanation": "The possessive 'her' requires a noun, and the noun formed from 'contribute' is 'contribution'. The other options are an adjective and verb forms.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-006",
+      "skill": "Phrasal verbs",
+      "difficulty": "intermediate",
+      "type": "multiple_choice",
+      "prompt": "The meeting was ___ until next Monday because the manager was ill.",
+      "options": [
+        { "id": "a", "text": "put off" },
+        { "id": "b", "text": "put up" },
+        { "id": "c", "text": "put on" },
+        { "id": "d", "text": "put out" }
+      ],
+      "correctAnswer": "a",
+      "explanation": "'Put off' means to postpone to a later time, which is what happened to the meeting. 'Put on' means to arrange or wear, 'put up' means to accommodate or raise, and 'put out' means to extinguish.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-007",
+      "skill": "Precise word choice",
+      "difficulty": "upper-intermediate",
+      "type": "multiple_choice",
+      "prompt": "The evidence was ___; the jury had no doubt about the verdict.",
+      "options": [
+        { "id": "a", "text": "inclusive" },
+        { "id": "b", "text": "conclusive" },
+        { "id": "c", "text": "exclusive" },
+        { "id": "d", "text": "elusive" }
+      ],
+      "correctAnswer": "b",
+      "explanation": "'Conclusive' means decisive and settling a question, which matches a jury left with no doubt. The other options look similar but mean unrelated things — 'elusive' in particular means difficult to find or pin down.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-008",
+      "skill": "Idiomatic noun choice",
+      "difficulty": "upper-intermediate",
+      "type": "multiple_choice",
+      "prompt": "She has a real ___ for languages; she learned Portuguese in six months.",
+      "options": [
+        { "id": "a", "text": "flair" },
+        { "id": "b", "text": "flare" },
+        { "id": "c", "text": "flavour" },
+        { "id": "d", "text": "flat" }
+      ],
+      "correctAnswer": "a",
+      "explanation": "'A flair for something' means a natural talent for it. 'Flare' is a sudden burst of light or anger and is a common spelling confusion with 'flair'.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-009",
+      "skill": "Word formation (adverb)",
+      "difficulty": "upper-intermediate",
+      "type": "multiple_choice",
+      "prompt": "The results were ___ consistent across all three groups.",
+      "options": [
+        { "id": "a", "text": "remarkable" },
+        { "id": "b", "text": "remarkably" },
+        { "id": "c", "text": "remarked" },
+        { "id": "d", "text": "remarking" }
+      ],
+      "correctAnswer": "b",
+      "explanation": "The gap modifies the adjective 'consistent', so an adverb is required: 'remarkably consistent'. The adjective 'remarkable' would have to modify a noun instead.",
+      "points": 1
+    }
+  ]
+}

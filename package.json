@@ -7,6 +7,9 @@
   "engines": {
     "node": ">=24.0.0"
   },
+  "prisma": {
+    "seed": "node prisma/seed.ts"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "npm run build:backend && npm run build:frontend",

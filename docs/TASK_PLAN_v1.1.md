@@ -183,10 +183,10 @@ Each Epic is one session. The following applies to every Epic and is not repeate
 - [x] T1.2.1 — Configure `vitest` for backend unit/integration tests and `supertest` for API-level tests, with one passing smoke test.
       Ref: ARCHITECTURE Section 15 (Testing Strategy)
       Output: vitest.config.ts + one passing smoke test · `npm test` runs and passes
-- [ ] T1.2.2 — Establish the integration-test harness every later Epic's database tests depend on: a separate test database URL (e.g. `DATABASE_URL_TEST` in `.env.example`), a migrate-then-reset step before the suite, per-test truncation/rollback, and shared fixture helpers for creating cohorts, staff users, and submissions.
+- [x] T1.2.2 — Establish the integration-test harness every later Epic's database tests depend on: a separate test database URL (e.g. `DATABASE_URL_TEST` in `.env.example`), a migrate-then-reset step before the suite, per-test truncation/rollback, and shared fixture helpers for creating cohorts, staff users, and submissions.
       Ref: ARCHITECTURE Section 15 (Testing Strategy — integration tests against a real test DB), Section 16 (Local development)
       Output: test setup module + fixture helpers · an example integration test creates and reads a row against the test database, and the suite leaves no residual data between tests
-      **Status — partially complete, checkbox deliberately unticked.** Delivered in E1: `src/test/db.ts` (`DATABASE_URL_TEST` resolution, `runMigrations()` migrate-then-reset, schema-agnostic `resetDatabase()` truncation), `src/test/globalSetup.ts` wired into `vitest.config.ts`, and 9 unit tests covering that behaviour. Outstanding: the cohort/staff/submission fixture helpers and the example create-and-read round trip. Both need `prisma/schema.prisma` (T2.1.1) and a reachable test database (E2's prerequisite), so they land in E2 rather than being guessed at here. No test database was reachable during the E1 session — the local PostgreSQL 18 install has no initialised cluster.
+      **Completed in E2.** E1 delivered `src/test/db.ts` (`DATABASE_URL_TEST` resolution, `runMigrations()`, schema-agnostic `resetDatabase()` truncation), `src/test/globalSetup.ts` wired into `vitest.config.ts`, and 9 unit tests. E2 added the outstanding halves once the schema existed: `src/test/fixtures.ts` (`useCleanTestDatabase()`, `createCohort()`, `createStaffUser()`, `createSubmission()`) and `src/data/SubmissionRepository.test.ts`, whose five integration tests include a create-and-read round trip and an explicit "leaves no residual data between tests" assertion. `npm test`: 16 passed.
 
 ---
 
@@ -214,40 +214,42 @@ Each Epic is one session. The following applies to every Epic and is not repeate
 
 ### Feature 2.1 — Database Schema & Migrations
 
-- [ ] T2.1.1 — Define the Prisma schema exactly as specified: `Cohort`, `Submission`, `ProcessingJob`, `StaffUser` models and the `SubmissionStatus`/`ProcessingStatus` enums.
+- [x] T2.1.1 — Define the Prisma schema exactly as specified: `Cohort`, `Submission`, `ProcessingJob`, `StaffUser` models and the `SubmissionStatus`/`ProcessingStatus` enums.
       Ref: ARCHITECTURE Section 6 (Database Design)
       Output: prisma/schema.prisma matches Section 6's model definitions exactly, including `@@unique([cohortId, rollNumberNormalized])` and both indexes on `Submission`/`ProcessingJob`
-- [ ] T2.1.2 — Generate and apply the initial migration against a local/dev Postgres database, and verify the cohort+roll uniqueness constraint is enforced at the database level.
+- [x] T2.1.2 — Generate and apply the initial migration against a local/dev Postgres database, and verify the cohort+roll uniqueness constraint is enforced at the database level.
       Ref: ARCHITECTURE Section 6 (Why these choices — unique constraint), Section 16 (Database migrations)
       Output: prisma/migrations/<timestamp>_init · `prisma migrate dev` applies cleanly; a direct duplicate `(cohortId, rollNumberNormalized)` insert is rejected by Postgres
-- [ ] T2.1.3 — Implement `src/data/prismaClient.ts` as the single shared Prisma client instance used throughout the app.
+- [x] T2.1.3 — Implement `src/data/prismaClient.ts` as the single shared Prisma client instance used throughout the app.
       Ref: ARCHITECTURE Section 4 (Project Structure — src/data/prismaClient.ts)
       Output: src/data/prismaClient.ts · imported by repositories without creating multiple client instances
-- [ ] T2.1.4 — Implement `src/data/SubmissionRepository.ts`'s core read/write surface (find by id, find by cohort + normalized roll number, create draft). This lands in E2 rather than E4 because `StudentIdentityService` (T3.2.1) is its first consumer — the repository must exist before E3, not after it.
+- [x] T2.1.4 — Implement `src/data/SubmissionRepository.ts`'s core read/write surface (find by id, find by cohort + normalized roll number, create draft). This lands in E2 rather than E4 because `StudentIdentityService` (T3.2.1) is its first consumer — the repository must exist before E3, not after it.
       Ref: ARCHITECTURE Section 4 (src/data/SubmissionRepository.ts), Section 6 (Submission model, uniqueness key), Section 18 (Canonical Locations — Database access)
       Output: src/data/SubmissionRepository.ts · integration test (test DB harness from T1.2.2) covers create-then-lookup by cohort + normalized roll
 
 ### Feature 2.2 — Content Versioning System
 
-- [ ] T2.2.1 — Author `content/versions/v1/*.json` (grammar-questions, vocabulary-questions, reading-questions, writing-prompt, writing-rubric, student-problems-statements) with structurally complete content including every metadata field FR-DET-002 requires (section, skill/topic label, difficulty level, question type, correct answer where applicable, prewritten explanation, scoring information).
+- [x] T2.2.1 — Author `content/versions/v1/*.json` (grammar-questions, vocabulary-questions, reading-questions, writing-prompt, writing-rubric, student-problems-statements) with structurally complete content including every metadata field FR-DET-002 requires (section, skill/topic label, difficulty level, question type, correct answer where applicable, prewritten explanation, scoring information).
       Ref: PRD Section 9.3 (FR-DET-002), Section 9.5 (FR-PROB-001/002), Section 10 (Assessment Structure); ARCHITECTURE Section 4 (content/ tree), Section 6 (writing-rubric.json)
       Output: content/versions/v1/*.json · valid JSON, each question/statement carries the required metadata fields
-- [ ] T2.2.2 — Author `content/current-version.json` pointing to `"v1"` — the version new drafts start under.
+      **Content is structurally final but marked `provisional` in-file.** PRD Section 23.1 leaves the question set (item 3), Student Problems wording (item 4), rubric weights (item 1), and the writing prompt (item 2) to the team, so every file carries `contentStatus: "provisional"` plus a `statusNote` naming the open item — the schema rejects a `provisional` file that does not explain itself, so placeholder content can never read as approved. Authored: 9 grammar + 9 vocabulary + 8 reading questions (2 passages), spread 8 basic / 10 intermediate / 8 upper-intermediate; 15 Student Problems statements across all 7 areas; the rubric's five approved criteria with PRD-23.1 placeholder equal weights (20 each, schema-enforced to sum to 100).
+- [x] T2.2.2 — Author `content/current-version.json` pointing to `"v1"` — the version new drafts start under.
       Ref: ARCHITECTURE Section 18 (Canonical Locations — current-version.json)
       Output: content/current-version.json · `ContentLoader.getCurrentVersion()` returns `"v1"`
-- [ ] T2.2.3 — Implement `src/content/contentSchemas.ts`: zod schemas validating each content file's shape, including `writing-rubric.json`'s LLM instructions and externalized scoring weights (never hardcoded).
+- [x] T2.2.3 — Implement `src/content/contentSchemas.ts`: zod schemas validating each content file's shape, including `writing-rubric.json`'s LLM instructions and externalized scoring weights (never hardcoded).
       Ref: ARCHITECTURE Section 2 (zod for content validation), Section 6 (contentVersion / writing-rubric.json), Section 18
       Output: src/content/contentSchemas.ts · a malformed fixture content file fails validation with a clear error
-- [ ] T2.2.4 — Implement `src/content/ContentLoader.ts`: loads and validates all versions under `content/versions/*` at construction/boot, exposes `getContent(version)` and `getCurrentVersion()`, fails fast on any malformed version.
+- [x] T2.2.4 — Implement `src/content/ContentLoader.ts`: loads and validates all versions under `content/versions/*` at construction/boot, exposes `getContent(version)` and `getCurrentVersion()`, fails fast on any malformed version.
       Ref: ARCHITECTURE Section 4, Section 16 (Startup behavior — step 2), Section 18
       Output: src/content/ContentLoader.ts · unit test: `getContent('v1')` still resolves correctly after a fixture `v2` is added; boot throws on a malformed fixture version
-- [ ] T2.2.5 — Wire `ContentLoader` into the `server.ts` boot sequence so the process exits before accepting requests if any content version fails validation.
+- [x] T2.2.5 — Wire `ContentLoader` into the `server.ts` boot sequence so the process exits before accepting requests if any content version fails validation.
       Ref: ARCHITECTURE Section 16 (Startup behavior)
       Output: src/server.ts · starting the server against a deliberately broken content fixture exits non-zero before listening
+      **Verified against a real broken file, not only a fixture tree.** With `content/versions/v1/grammar-questions.json` truncated to invalid JSON, `node src/server.ts` exited 1, printed `[server] Content validation failed — refusing to start.` with the file path and parse position, and never reached `app.listen`. The file was restored byte-identically afterwards and the server boots again.
 
 ### Feature 2.3 — Seed Data
 
-- [ ] T2.3.1 — Implement a seed script creating at least one `Cohort` (with access code) and one `StaffUser` (bcrypt-hashed password) for local development and testing. Hash with `bcrypt` directly at this stage; T3.1.2 introduces the shared `passwordHasher` wrapper and the seed is repointed at it there.
+- [x] T2.3.1 — Implement a seed script creating at least one `Cohort` (with access code) and one `StaffUser` (bcrypt-hashed password) for local development and testing. Hash with `bcrypt` directly at this stage; T3.1.2 introduces the shared `passwordHasher` wrapper and the seed is repointed at it there.
       Ref: PRD Section 6.2 (Staff accounts manually provisioned); ARCHITECTURE Section 6 (Cohort, StaffUser)
       Output: prisma/seed.ts · running the seed script populates a usable local dev cohort and staff login
 

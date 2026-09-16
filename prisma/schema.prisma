@@ -1,0 +1,117 @@
+// Database schema — English-Language Assessment & Diagnostic Pilot.
+//
+// Canonical location for "Database schema and constraints" (ARCHITECTURE Section 18). The models
+// below are the literal translation of ARCHITECTURE Section 6; that document, not this file, is
+// where the design rationale lives.
+//
+// Two invariants are enforced here rather than in application code, because application code
+// cannot survive a race condition and Postgres can:
+//   - `@@unique([cohortId, rollNumberNormalized])` — one submission per cohort + roll number.
+//   - The section-level autosave merge relies on `answers` being `jsonb`, which Prisma's `Json`
+//     maps to on PostgreSQL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SubmissionStatus {
+  draft
+  submitted
+}
+
+enum ProcessingStatus {
+  not_applicable // e.g., no open-text Student Problems response was given
+  pending
+  processing
+  succeeded
+  failed_needs_review
+}
+
+model Cohort {
+  id        String   @id @default(uuid())
+  code      String   @unique // student-entered access code
+  name      String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  submissions Submission[]
+}
+
+model Submission {
+  id                   String @id @default(uuid())
+  cohortId             String
+  cohort               Cohort @relation(fields: [cohortId], references: [id])
+  rollNumberRaw        String // as typed, preserved for display
+  rollNumberNormalized String // trimmed + lowercased, used for the uniqueness/lookup key
+  studentName          String
+
+  status SubmissionStatus @default(draft)
+
+  // Captured once, at draft creation, from ContentLoader.getCurrentVersion(); frozen for the
+  // life of the submission. Governs question content, the writing prompt, the LLM rubric
+  // instructions, AND the rubric weights — one version tag covers the entire content bundle, so
+  // there is no separate "rubric version" that could drift out of sync with the question version.
+  contentVersion String
+
+  // Draft / answer data — keyed by section, which is also the autosave PATCH unit
+  // { grammar: {...}, vocabulary: {...}, reading: {...}, writing: {...}, studentProblems: {...} }
+  answers Json
+
+  // Deterministic results (computed at submission time)
+  grammarScore    Int?
+  vocabularyScore Int?
+  readingScore    Int?
+
+  // Writing (AI-assisted, computed by the background worker)
+  writingStatus         ProcessingStatus @default(not_applicable)
+  writingCriteriaScores Json? // { grammarAccuracy, vocabulary, sentenceStructure, coherence, taskCompletion }
+  writingOverallScore   Int? // deterministically computed 0-100 by WritingScoreCalculator
+  writingFeedback       Json? // strengths, weaknesses, corrections, suggestions
+
+  // Student Problems — original vs. derived, kept strictly separate
+  problemsLikertAnswers    Json? // { statementId: 1-5, ... }
+  problemsOpenTextOriginal String? // authoritative, written exactly once at submission, never overwritten
+  problemsTextStatus       ProcessingStatus @default(not_applicable)
+  problemsTextDerived      Json? // { normalizedText, categories: [...] } — explicitly derived data
+
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+  submittedAt DateTime? @db.Timestamptz(3)
+
+  jobs ProcessingJob[]
+
+  @@unique([cohortId, rollNumberNormalized])
+  @@index([cohortId])
+  @@index([status])
+}
+
+// Deliberately thin: identifies WHICH work to do, not the data itself. The worker resolves
+// the actual response text / content / rubric it needs by reading the Submission row via
+// SubmissionRepository.getEvaluationContext() — never from a field on this model.
+model ProcessingJob {
+  id            String           @id @default(uuid())
+  submissionId  String
+  submission    Submission       @relation(fields: [submissionId], references: [id])
+  jobType       String // 'writing_eval' | 'student_problems_text'
+  status        ProcessingStatus @default(pending)
+  attemptCount  Int              @default(0)
+  lastError     String?
+  claimedAt     DateTime?        @db.Timestamptz(3)
+  nextAttemptAt DateTime         @default(now()) @db.Timestamptz(3)
+  createdAt     DateTime         @default(now()) @db.Timestamptz(3)
+  completedAt   DateTime?        @db.Timestamptz(3)
+
+  @@index([status, nextAttemptAt])
+  @@index([submissionId])
+}
+
+model StaffUser {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+}

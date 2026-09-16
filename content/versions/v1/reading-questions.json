@@ -1,0 +1,147 @@
+{
+  "section": "reading",
+  "title": "Reading",
+  "contentStatus": "provisional",
+  "statusNote": "Structure is final; the passages and questions are a development set. PRD Section 23.1 item 3 leaves the final questions and difficulty distribution to the team.",
+  "instructions": "Read each passage, then answer the questions that follow it.",
+  "passages": [
+    {
+      "id": "reading-passage-1",
+      "title": "Why Sleep Matters for Learning",
+      "text": "For decades, students have been advised to study late into the night before an examination. Recent research on memory suggests that this advice may be counterproductive. During deep sleep, the brain replays patterns of activity recorded during the day, strengthening the connections that hold new information. A student who studies until three in the morning and then sleeps for three hours gives that process very little time to work. In one experiment, participants who slept for eight hours after learning a list of word pairs remembered substantially more of it a week later than those who had stayed awake. The researchers concluded that sleep is not simply a period of rest, but an active part of learning itself. For students, the practical implication is straightforward: a regular sleep schedule may matter as much as the hours spent at a desk.",
+      "questions": [
+        {
+          "id": "reading-001",
+          "skill": "Reading for detail",
+          "difficulty": "basic",
+          "type": "multiple_choice",
+          "prompt": "According to the passage, what happens during deep sleep?",
+          "options": [
+            { "id": "a", "text": "The brain rests completely and stops processing." },
+            { "id": "b", "text": "The brain replays patterns of activity recorded during the day." },
+            { "id": "c", "text": "The brain removes unimportant information." },
+            { "id": "d", "text": "The brain produces new word pairs." }
+          ],
+          "correctAnswer": "b",
+          "explanation": "The passage states directly that 'during deep sleep, the brain replays patterns of activity recorded during the day'. Option (a) contradicts the passage's conclusion that sleep is 'an active part of learning'.",
+          "points": 1
+        },
+        {
+          "id": "reading-002",
+          "skill": "Inference from evidence",
+          "difficulty": "intermediate",
+          "type": "multiple_choice",
+          "prompt": "What does the experiment described in the passage suggest?",
+          "options": [
+            { "id": "a", "text": "Sleeping eight hours guarantees better examination results." },
+            { "id": "b", "text": "Staying awake helps people memorize word pairs." },
+            { "id": "c", "text": "Sleep after learning improves how much is remembered later." },
+            { "id": "d", "text": "Word pairs are unusually difficult to learn." }
+          ],
+          "correctAnswer": "c",
+          "explanation": "The experiment compared two groups and found the group that slept remembered more a week later, so it supports the link between sleep and retention. Option (a) overstates the finding — the passage claims no guarantee about examination results.",
+          "points": 1
+        },
+        {
+          "id": "reading-003",
+          "skill": "Vocabulary in context",
+          "difficulty": "intermediate",
+          "type": "multiple_choice",
+          "prompt": "In the passage, the word 'counterproductive' is closest in meaning to:",
+          "options": [
+            { "id": "a", "text": "producing the opposite of the desired result" },
+            { "id": "b", "text": "requiring far more effort than expected" },
+            { "id": "c", "text": "difficult to measure accurately" },
+            { "id": "d", "text": "widely accepted by researchers" }
+          ],
+          "correctAnswer": "a",
+          "explanation": "'Counterproductive' means having the opposite of the intended effect. The passage uses it to say that studying late may work against the student rather than for them.",
+          "points": 1
+        },
+        {
+          "id": "reading-004",
+          "skill": "Author's purpose",
+          "difficulty": "upper-intermediate",
+          "type": "multiple_choice",
+          "prompt": "What is the main purpose of the passage?",
+          "options": [
+            { "id": "a", "text": "To criticise students who study late at night." },
+            { "id": "b", "text": "To present a research finding and draw a practical implication from it." },
+            { "id": "c", "text": "To compare two competing theories of memory formation." },
+            { "id": "d", "text": "To argue that examinations should be scheduled later in the day." }
+          ],
+          "correctAnswer": "b",
+          "explanation": "The passage reports research on sleep and memory, then closes with the practical implication for students. It does not compare competing theories, and its tone is explanatory rather than critical.",
+          "points": 1
+        }
+      ]
+    },
+    {
+      "id": "reading-passage-2",
+      "title": "Farming on Rooftops",
+      "text": "In cities from Singapore to Paris, vegetables are increasingly grown not in fields but on roofs. Rooftop farms take advantage of unused space, shorten the distance food travels to the plate, and can lower a building's temperature by absorbing sunlight that would otherwise be converted into heat. Yet the model has limits. Crops grown on roofs must be lifted to the top of a building and, in many cities, protected from strong wind; both add cost. Because most rooftops offer only shallow soil, these farms usually grow leafy vegetables rather than wheat or root crops, so they cannot replace conventional agriculture. Their contribution is better understood as a supplement: they supply a modest share of a city's fresh produce while making the urban environment slightly cooler and greener. Whether they expand will depend less on technology than on rent, regulation, and the willingness of building owners to share their roofs.",
+      "questions": [
+        {
+          "id": "reading-005",
+          "skill": "Reading for detail",
+          "difficulty": "basic",
+          "type": "true_false",
+          "prompt": "Rooftop farms can help lower the temperature of a building.",
+          "options": [
+            { "id": "a", "text": "True" },
+            { "id": "b", "text": "False" }
+          ],
+          "correctAnswer": "a",
+          "explanation": "The passage states that rooftop farms 'can lower a building's temperature by absorbing sunlight that would otherwise be converted into heat'.",
+          "points": 1
+        },
+        {
+          "id": "reading-006",
+          "skill": "Reading for detail",
+          "difficulty": "intermediate",
+          "type": "true_false",
+          "prompt": "According to the passage, rooftop farms can fully replace conventional agriculture.",
+          "options": [
+            { "id": "a", "text": "True" },
+            { "id": "b", "text": "False" }
+          ],
+          "correctAnswer": "b",
+          "explanation": "The passage says explicitly that rooftop farms 'cannot replace conventional agriculture' and describes their contribution as 'a supplement'.",
+          "points": 1
+        },
+        {
+          "id": "reading-007",
+          "skill": "Cause and effect",
+          "difficulty": "intermediate",
+          "type": "multiple_choice",
+          "prompt": "Why do rooftop farms usually grow leafy vegetables?",
+          "options": [
+            { "id": "a", "text": "Leafy vegetables are more profitable than wheat." },
+            { "id": "b", "text": "Most rooftops have only shallow soil." },
+            { "id": "c", "text": "Urban consumers prefer them to root crops." },
+            { "id": "d", "text": "They need less sunlight than other crops." }
+          ],
+          "correctAnswer": "b",
+          "explanation": "The passage links the crop choice to soil depth: 'because most rooftops offer only shallow soil, these farms usually grow leafy vegetables rather than wheat or root crops'.",
+          "points": 1
+        },
+        {
+          "id": "reading-008",
+          "skill": "Inference from the conclusion",
+          "difficulty": "upper-intermediate",
+          "type": "multiple_choice",
+          "prompt": "What does the author suggest will determine whether rooftop farms expand?",
+          "options": [
+            { "id": "a", "text": "Advances in farming technology." },
+            { "id": "b", "text": "The availability of stronger winds on tall buildings." },
+            { "id": "c", "text": "Economic and regulatory factors." },
+            { "id": "d", "text": "The number of buildings in a city." }
+          ],
+          "correctAnswer": "c",
+          "explanation": "The final sentence says expansion 'will depend less on technology than on rent, regulation, and the willingness of building owners' — that is, economic and regulatory factors, not technical ones.",
+          "points": 1
+        }
+      ]
+    }
+  ]
+}
