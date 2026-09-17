@@ -302,7 +302,14 @@ describe('app assembly', () => {
       .send({ cohortCode: 'PILOT-2026', rollNumber: '2021-001', studentName: 'Alice Example' })
       .expect(200);
 
-    expect(setCookieFor(overTls, STUDENT_SESSION_COOKIE)).toContain('; secure');
+    // All three attributes Section 13 names, on the cookie the real route issued — not on a
+    // hand-built harness (`src/auth/session.test.ts` proves the configuration there; this proves it
+    // survives the router, and the global origin check T9.3.1 mounted in front of it).
+    const issued = setCookieFor(overTls, STUDENT_SESSION_COOKIE);
+
+    expect(issued).toContain('httponly');
+    expect(issued?.toLowerCase()).toContain('samesite=lax');
+    expect(issued).toContain('; secure');
 
     const direct = await request(app)
       .post('/api/session/student-verify')

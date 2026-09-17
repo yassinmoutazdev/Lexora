@@ -1,5 +1,4 @@
 import express from 'express';
-import pino from 'pino';
 import { stringify } from 'csv-stringify';
 import { z } from 'zod';
 import type { Cohort, Submission } from '@prisma/client';
@@ -10,6 +9,7 @@ import {
   issueStaffSession,
   staffSessionMiddleware,
 } from '../auth/session.ts';
+import { logger } from '../config/logger.ts';
 import { getContentLoader, type ContentLoader, type ContentBundle } from '../content/ContentLoader.ts';
 import { cohortRepository } from '../data/CohortRepository.ts';
 import {
@@ -41,8 +41,15 @@ import { invalidRequestErrorBody, requiredText, validateBody } from './middlewar
  *
  * This file is also where staff data-access logging lives (Section 13, Section 18 — canonical
  * location for "Staff data-access logging"): `GET /submissions/:id` emits the one structured `pino`
- * line the architecture specifies, through the logger below. Nothing else here is logged, and
- * deliberately so — Section 13 defines exactly one access line, and the export endpoint is not it.
+ * line the architecture specifies. Nothing else here is logged, and deliberately so — Section 13
+ * defines exactly one access line, and the export endpoint is not it.
+ *
+ * The `pino` instance it writes through is not created here. E8 created a local one, with a note
+ * saying the project-wide logging task would decide where it lives; T9.2.1 decided, and it is now the
+ * single process-wide logger in `src/config/logger.ts`. One instance means a redaction path is set
+ * everywhere or nowhere — a second one carrying only this route's needs is the one way to end up with
+ * `apiKey` redacted in some log lines and not others, which is the property Section 13's defence in
+ * depth is worth having.
  */
 
 /**
@@ -78,57 +85,6 @@ const UNKNOWN_COHORT_MESSAGE = 'That cohort does not exist';
  * submission".
  */
 const UNKNOWN_SUBMISSION_MESSAGE = 'No such submission';
-
-/**
- * The application logger — the first, and for now the only, structured logger in the system.
- *
- * ## Why it is here, and why it is this small
- *
- * ARCHITECTURE Section 18 records the canonical location for the *log line* — this file, at
- * `GET /api/staff/submissions/:id` — but names no home for a logger module, and Section 4's project
- * structure does not either. E8 needs exactly one logger to emit exactly one kind of line, and the
- * project-wide logging task (T9.2.1) is a later Epic's job. So rather than invent a logging module,
- * an interface, or an injection seam that T9.2.1 would then have to unpick, this is a plain `pino`
- * instance created where the only caller is.
- *
- * When T9.2.1 wires logging across the application it will need to decide where the instance lives
- * and how it is reached; the `redact` configuration below is the part worth carrying over
- * unchanged, and moving it is a cut and paste rather than a rewrite. Nothing else here is a
- * decision — no transport, no level filtering, no wrapper function.
- *
- * ## Redaction (Section 13)
- *
- * Section 13 requires `pino` to be *"configured to redact any field literally named
- * `apiKey`/`authorization`"* as a defence in depth for the Ollama key, which is read only inside
- * `OllamaProvider` and must never reach a log. `censor` is `[Redacted]` rather than pino's default
- * so a redacted field is visibly redacted rather than looking like the string `[Redacted]` was the
- * value.
- *
- * ## The destination is stdout, and it is named explicitly
- *
- * Section 13 and Section 16 both place these lines in stdout: *"an operational log, written to
- * stdout and viewable in Render's log dashboard alongside every other application log — it is not a
- * database table, not an audit-event model, and nothing else in the system reads it back."* So there
- * is no file destination, no rotation, and nothing that persists them anywhere else.
- *
- * `process.stdout` is passed rather than left to `pino`'s default fd-based destination. The two
- * write the same bytes to the same place; the difference is *when* the destination is resolved. The
- * fd destination binds at logger construction — which for a module-level logger is import time —
- * while naming the stream resolves `write` on every call. That makes this line behave like every
- * other stdout write in the process, including a `process.stdout.write` interceptor, which is what
- * lets the test for it observe the real line in the real place rather than through a test hook this
- * file would otherwise have to grow. The cost is pino's fd fast path, which at a handful of staff
- * accesses per session is not a cost.
- */
-const logger = pino(
-  {
-    redact: {
-      paths: ['apiKey', 'authorization', '*.apiKey', '*.authorization'],
-      censor: '[Redacted]',
-    },
-  },
-  process.stdout,
-);
 
 /**
  * The dashboard's query string.

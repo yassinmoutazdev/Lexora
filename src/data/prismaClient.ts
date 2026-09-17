@@ -54,3 +54,32 @@ export async function disconnectPrismaClient(): Promise<void> {
   await instance.$disconnect();
   instance = undefined;
 }
+
+/**
+ * Answers only if the database actually answered (T9.2.2).
+ *
+ * ARCHITECTURE Section 16 gives `GET /health` its one job: *"a `/health` endpoint — which itself
+ * performs a trivial DB query"*. So the ping runs through the same shared client the application
+ * uses, which is the point — it proves the pool can reach Postgres, not merely that the process is
+ * alive. A ping that could not fail would keep Render awake while Supabase went cold, which is worse
+ * than no ping (Section 16's free-tier behavior).
+ *
+ * ## Why this lives here rather than in a repository
+ *
+ * Section 18 puts database access in `src/data/`. There is no entity to name — `SELECT 1` reads no
+ * table — so a `HealthRepository` would be a repository for nothing, and putting the query in the
+ * route would put Prisma in the API layer (Section 1: the API layer never contains SQL directly).
+ * This module already owns the client's whole lifecycle, so the one query that belongs to no entity
+ * belongs to it.
+ *
+ * ## Why a tagged template and not a string
+ *
+ * `$queryRaw` as a tagged template is Prisma's parameterized form: the query is a fixed literal with
+ * nothing interpolated, so there is no path by which a value could be concatenated into it. That is
+ * also why it is not a `$queryRawUnsafe` call — the unsafe variant is for the test harness's
+ * schema-agnostic `TRUNCATE`, where the statement genuinely cannot be written in advance, and it
+ * appears nowhere else in `src/` (T9.3.3).
+ */
+export async function pingDatabase(): Promise<void> {
+  await getPrismaClient().$queryRaw`SELECT 1`;
+}

@@ -4,6 +4,7 @@ import { createApp } from './app.ts';
 import { DEFAULT_WORKER_SETTINGS, createWorkerLoop } from './background/workerLoop.ts';
 import { getContentLoader } from './content/ContentLoader.ts';
 import { env } from './config/env.ts';
+import { logger } from './config/logger.ts';
 import { submissionRepository } from './data/SubmissionRepository.ts';
 import { getJobService } from './domain/jobs/JobService.ts';
 
@@ -57,10 +58,10 @@ function selectAIEvaluationService(): AIEvaluationService | null {
   }
 
   if (!env.OLLAMA_API_KEY || !env.OLLAMA_BASE_URL) {
-    // Structured `pino` logging replaces this console call in T9.2.1, alongside the loop's own.
-    console.warn(
-      '[startup] No AI provider configured (OLLAMA_API_KEY/OLLAMA_BASE_URL unset). ' +
-        'Writing and Student Problems jobs will stay pending until one is.',
+    logger.warn(
+      { event: 'ai_provider_absent' },
+      'No AI provider configured (OLLAMA_API_KEY/OLLAMA_BASE_URL unset). Writing and Student ' +
+        'Problems jobs will stay pending until one is.',
     );
 
     return null;
@@ -88,21 +89,27 @@ function startWorkerLoop(ai: AIEvaluationService): void {
     content,
     ai,
     settings,
-    // Structured `pino` logging replaces this console call in T9.2.1. What matters now is that the
-    // hook is supplied rather than defaulted: it is the only thing the loop says out loud, and a
-    // silently failing background job is the one failure mode Section 16 says staff must be able to
-    // see.
+    // The loop's only spoken line, and the one thing that makes a silently failing background job
+    // visible (Section 16). `err` is pino's error key, so the serialized line carries the type, the
+    // message, and the stack — the same "full detail server-side" `errorHandler` keeps for request
+    // failures, and the reason the loop's failure is diagnosable from Render's log viewer alone.
     onError: (error, jobId) => {
-      const detail = error instanceof Error ? error.message : String(error);
-      console.error(`[worker] job ${jobId ?? '(no job claimed)'} failed: ${detail}`);
+      logger.error(
+        { event: 'worker_job_failed', jobId: jobId ?? null, err: error },
+        'background job failed',
+      );
     },
   });
 
   loop.start();
 
-  console.log(
-    `[server] background worker started (polling every ${settings.pollIntervalMs}ms, ` +
-      `up to ${settings.maxAttempts} attempts per job)`,
+  logger.info(
+    {
+      event: 'worker_started',
+      pollIntervalMs: settings.pollIntervalMs,
+      maxAttempts: settings.maxAttempts,
+    },
+    'background worker started',
   );
 }
 
@@ -116,10 +123,11 @@ function main(): void {
   try {
     getContentLoader();
   } catch (error) {
-    console.error(
-      `[server] Content validation failed — refusing to start.\n${(error as Error).message}`,
+    logger.error(
+      { event: 'content_validation_failed', err: error },
+      'Content validation failed — refusing to start',
     );
-    // Setting the exit code rather than calling process.exit() lets the message above flush.
+    // Setting the exit code rather than calling process.exit() lets the line above flush.
     process.exitCode = 1;
     return;
   }
@@ -128,13 +136,19 @@ function main(): void {
   const app = createApp();
 
   app.listen(env.PORT, () => {
-    // Structured pino logging replaces the console calls in T9.2.1.
     const contentLoader = getContentLoader();
-    console.log(
-      `[server] content versions loaded: ${contentLoader.getLoadedVersions().join(', ')} ` +
-        `(current: ${contentLoader.getCurrentVersion()})`,
+    logger.info(
+      {
+        event: 'content_versions_loaded',
+        versions: contentLoader.getLoadedVersions(),
+        currentVersion: contentLoader.getCurrentVersion(),
+      },
+      'content versions loaded',
     );
-    console.log(`[server] listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
+    logger.info(
+      { event: 'server_listening', port: env.PORT, nodeEnv: env.NODE_ENV },
+      'server listening',
+    );
   });
 
   // Step 4 — the background worker loop, started once, here, and deliberately not from `app.ts`.
@@ -144,10 +158,11 @@ function main(): void {
   const ai = selectAIEvaluationService();
 
   if (ai === null) {
-    console.warn(
-      '[server] No AI evaluation provider is configured, so the background worker loop was NOT ' +
-        'started. Writing evaluation and Student Problems processing are unavailable: their jobs ' +
-        'stay `pending` and student reports say the feedback is still being prepared, which is the ' +
+    logger.warn(
+      { event: 'worker_not_started' },
+      'No AI evaluation provider is configured, so the background worker loop was NOT started. ' +
+        'Writing evaluation and Student Problems processing are unavailable: their jobs stay ' +
+        '`pending` and student reports say the feedback is still being prepared, which is the ' +
         'truth. The assessment flow, sessions, and deterministic scoring are unaffected. ' +
         'ARCHITECTURE Section 17; the production provider arrives in E7 (T7.2.3).',
     );

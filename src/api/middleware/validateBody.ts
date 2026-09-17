@@ -29,6 +29,15 @@ import type { ZodTypeAny } from 'zod';
  */
 
 /**
+ * The `error` string every 400 carries.
+ *
+ * Exported because the error handler answers this same failure class for a body the parser could not
+ * read at all (T9.1.1): there is no schema to name a field from in that case, so there are no
+ * `details`, but it is the same refusal and it has to read the same to the client.
+ */
+export const INVALID_REQUEST_ERROR = 'Invalid request body';
+
+/**
  * The 400 body a `zod` refusal produces.
  *
  * Exported because the dashboard's cohort filter is validated from the *query* string rather than
@@ -41,7 +50,7 @@ export function invalidRequestErrorBody(error: z.ZodError): {
   details: { field: string; message: string }[];
 } {
   return {
-    error: 'Invalid request body',
+    error: INVALID_REQUEST_ERROR,
     details: error.issues.map((issue) => ({
       field: issue.path.join('.') || '(root)',
       message: issue.message,

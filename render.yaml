@@ -1,0 +1,83 @@
+# Render Blueprint — English-Language Assessment & Diagnostic Pilot
+#
+# ARCHITECTURE Section 16: "a single Render free web service, built from the repository
+# (`npm ci && npm run build`), started via `node dist/server.js`, which serves the built React bundle
+# as static files and runs the API + worker loop in the same process."
+#
+# One service, and that is the architecture rather than an economy: the worker loop is not a separate
+# process or service (Section 16, "Worker lifecycle"), so there is nothing here to scale or deploy
+# independently.
+#
+# NOT YET VERIFIED AGAINST A LIVE DEPLOY. This file was written in a session with no Render account
+# and no way to reach one, so what is confirmed is the *local* half — the same build and start
+# commands produce a single process serving the built bundle and the API, with migrations applied
+# before it binds a port (`dist/verify-production-boot.mjs`). The deploy-time half of T9.4.1 — a live
+# check that a login sets a `Secure` cookie and that two `X-Forwarded-For` values get separate
+# rate-limit budgets — remains outstanding and is recorded as such in `TASK_PLAN.md`.
+
+services:
+  - type: web
+    name: lexora
+    runtime: node
+    plan: free
+    # The free instance type is fixed by Section 16's $0 constraint, and Section 16's own free-tier
+    # notes (a 15-minute sleep, a cold-start wake) are written against it.
+    region: frankfurt
+
+    # Build runs on every deploy, and the order inside it is the part that matters.
+    #
+    # `prisma generate` comes FIRST because nothing generates the client implicitly: there is no
+    # `postinstall` script and no `prisma generate` in any other npm script, so on a clean checkout
+    # `tsc` would compile against a `@prisma/client` whose generated types do not exist. It works
+    # locally only because `prisma generate` was run by hand at some point, which is exactly the kind
+    # of difference that turns a first deploy into a build failure.
+    #
+    # `prisma migrate deploy` comes LAST, after `npm run build`. Section 16 asks for migrations "as
+    # part of the Render build/release step, before the new instance starts serving traffic", which
+    # both positions satisfy — the build completes before the instance is released. It is placed after
+    # the compile so that a code error aborts the deploy *without* having already migrated the
+    # database: the alternative leaves production on the old build against a newer schema, which for
+    # additive migrations is survivable and for any other kind is not worth the risk when the fix is
+    # one reordering. `migrate deploy` only applies committed migration files and never generates or
+    # resets, so it is safe to run unattended.
+    buildCommand: npm ci && npx prisma generate && npm run build && npx prisma migrate deploy
+
+    # Section 16's start command verbatim. `npm start` is the same thing and is deliberately not
+    # used: naming the artifact means a deploy that forgot to build fails loudly on a missing file
+    # rather than silently running a stale one.
+    startCommand: node dist/server.js
+
+    # Section 16's production environment table. Supabase Postgres, the Ollama Cloud endpoint, and the
+    # cookie-signing secret.
+    #
+    # `sync: false` on the three secrets means Render prompts for the value in the dashboard and never
+    # stores it in this file — which is committed, and must not carry credentials (CLAUDE.md: "Never
+    # commit `.env`, credentials, or build output"). No default is given for any of them, so a
+    # deployment that forgets one fails at boot in `src/config/env.ts`, which validates every required
+    # variable on import and names the missing one, rather than failing later on a live request.
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Supabase Postgres connection string.
+      - key: DATABASE_URL
+        sync: false
+
+      # Read only inside `src/ai/OllamaProvider.ts`; never sent to the client, never logged
+      # (Section 13, and the `redact` configuration in `src/config/logger.ts`).
+      - key: OLLAMA_API_KEY
+        sync: false
+
+      - key: OLLAMA_BASE_URL
+        sync: false
+
+      # Signs both session cookies. Must be at least 32 characters; `src/config/env.ts` enforces it.
+      - key: SESSION_SECRET
+        sync: false
+
+    # No `PORT` — Render injects it, and `src/config/env.ts` reads it with a 3000 default.
+    #
+    # No `healthCheckPath`. Render's health check would need `/health` (T9.2.2) to answer 2xx, and it
+    # does, but pointing it there would make a database outage a *deploy* failure rather than a
+    # degraded service. The endpoint exists for the external keep-warm ping in `docs/RUNBOOK.md`,
+    # which is a mitigation the architecture calls optional.

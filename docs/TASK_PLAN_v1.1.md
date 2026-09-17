@@ -666,33 +666,251 @@ Task **identifiers are unchanged**. `T8.3.2` stays `T8.3.2` and stays listed und
 
 ### Feature 9.1 — Error Handling
 
-- [ ] T9.1.1 — Implement centralized Express error-handling middleware mapping each failure class in Architecture Section 11's table to its user-facing response (validation 400, identity-not-found generic message, authorization 401/403, database 500 with a generic message), never leaking stack traces, SQL, or prompt content.
+- [x] T9.1.1 — Implement centralized Express error-handling middleware mapping each failure class in Architecture Section 11's table to its user-facing response (validation 400, identity-not-found generic message, authorization 401/403, database 500 with a generic message), never leaking stack traces, SQL, or prompt content.
       Ref: ARCHITECTURE Section 11 (Error Handling Strategy)
       Output: src/api/middleware (error handler) · integration test: each failure class returns the specified generic message and status; full detail is retained server-side in logs
-- [ ] T9.1.2 — Confirm submission-conflict handling (retry/double-click on an already-submitted draft) returns the existing report as a success, not an error.
+
+      **The handler is the recipient those `next(error)` calls never had.** Every route already ended
+      its handler with `next(error)` because Express 4 does not forward async rejections, but no error
+      middleware existed to receive them, so they fell through to Express's built-in handler — which
+      answers `text/html` with the stack embedded outside production. `src/api/middleware/errorHandler.ts`
+      is mounted last in `createApp()` (Express dispatches error middleware in registration order, so a
+      handler mounted above the routers would be inert) and maps: a 4xx status carried on the error →
+      that status; `ZodError` → 400 with the field-level body; `res.headersSent` → delegate to
+      Express's own handler so a mid-stream CSV failure truncates the download instead of pretending
+      to have completed; everything else → 500 with Section 11's generic message, full detail logged.
+      Identity-not-found (400 generic) and authorization (401) are answered by `StudentIdentityService`
+      and `requireSession` before any error is raised, so the handler does not re-answer them — the
+      integration test asserts all four classes against the real assembled app instead.
+
+      **A regression this task introduced, caught by probing rather than by the test suite.** The first
+      version answered every non-`ZodError` with 500 — including `express.json()`'s own pre-classified
+      400 for an unparseable body, which Express's default handler had been honouring. Section 11 files
+      a malformed payload under "Validation error" → 400, so that would have quietly reclassified a
+      client mistake as a server failure. The 4xx branch above is the fix, and it is the whole 4xx range
+      rather than a special case for the parser, which keeps behaviour identical to what it replaced.
+      Measured, not assumed: `node dist/prove-error-mapping.mjs` and `node dist/probe-json-body.mjs`
+      build the pre-T9.1.1 assembly (routers, no handler) beside `createApp()` and force one failure
+      each. Before: `500 text/html` carrying `PrismaClientKnownRequestError`, the SQL, and the stack /
+      `400 text/html` carrying the `SyntaxError` stack. After: `500 application/json
+      {"error":"Something went wrong — your answers are saved"}` / `400 application/json
+      {"error":"Invalid request body"}`, with the stack retained server-side. (Both scripts live in
+      gitignored `dist/`, alongside E8's `dist/drive-ui.mjs` — they are scratch verification harnesses,
+      not build output, and they are re-runnable after `npm run build`.)
+
+      **Logging here is the same interim `src/server.ts` uses** — `console.error` with the T9.2.1 note —
+      because the project-wide `pino` configuration is T9.2.1's task and this one precedes it. What
+      T9.1.1 owes is that the detail is *retained* rather than discarded, which is what makes the
+      browser's generic message a reduction instead of a deletion. The test spies on the `console.error`
+      call rather than intercepting `process.stderr.write` (the technique `staff.routes.test.ts` uses for
+      `pino`'s stdout): vitest replaces `console` with its own buffering object, so a stream interceptor
+      observes an empty string that reads as "nothing was logged" — confirmed with a throwaway probe
+      before the test was written. `npm test`: 438 passed, 27 files.
+- [x] T9.1.2 — Confirm submission-conflict handling (retry/double-click on an already-submitted draft) returns the existing report as a success, not an error.
       Ref: ARCHITECTURE Section 11 (Submission conflict), Section 12 (Safe retries on submit)
       Output: regression test on POST /api/student/submit · a duplicate submit returns 200 with the same report body
 
+      **Confirmed against existing coverage; no second test written.** The task is worded "Confirm",
+      and the `Output:` condition is met verbatim by `src/api/student.routes.test.ts` —
+      *"treats a second submit as success and answers with the same report"* asserts both POSTs
+      `.expect(200)` and `expect(second.body).toEqual(first.body)`, which is "200 with the same report
+      body" exactly. Alongside it, *"does not enqueue a second round of jobs on a repeated submit"*
+      pins the consequence that a duplicate transition would otherwise show up as (a second pair of
+      jobs, and a second AI evaluation the student would see twice). `src/domain/submission/SubmissionService.test.ts`
+      carries the same guarantee one layer down, including that the second call returns the *same row*
+      with the same `submittedAt` and scores rather than a fresh transition that happens to look alike.
+
+      **The one plausible gap — concurrent submits — is already covered, so it is not a gap.** The
+      route is a pass-through of `finalize`'s outcome (`student.routes.ts` maps `finalized` and
+      `already_submitted` to the same `res.json(toStudentReport(...))`), so the race lives entirely in
+      the service, and `SubmissionService.test.ts` exercises it twice: two simultaneous finalizes
+      resolve to exactly one `finalized` and one `already_submitted`, and five simultaneous finalizes
+      to one and four — each leaving one submission row, one `submittedAt`, and exactly two jobs. That
+      is Section 15's "concurrent simultaneous submit requests (simulated) never create two rows" and
+      Section 12's "the finalize transaction is idempotent by construction". Adding a route-level
+      concurrency test would re-assert a guarantee the layer that owns it already proves.
+
 ### Feature 9.2 — Logging & Observability
 
-- [ ] T9.2.1 — Configure `pino` structured JSON logging to stdout across the application, with redaction of any field named `apiKey`/`authorization`.
+- [x] T9.2.1 — Configure `pino` structured JSON logging to stdout across the application, with redaction of any field named `apiKey`/`authorization`.
       Ref: ARCHITECTURE Section 13 (API key protection — pino redact), Section 16 (Logging)
       Output: logging configuration module · test confirms a log line containing an `apiKey` field is redacted in output
-- [ ] T9.2.2 — Implement `GET /health`, performing a trivial DB query, for use as an external keep-warm ping target.
+
+      **A move, not an addition.** E8 put a module-level `pino` instance in `src/api/staff.routes.ts`
+      to emit Section 13's one access line, with a comment saying the project-wide logging task would
+      decide where the instance lives. `src/config/logger.ts` is that decision, and it is the process's
+      only logger. Section 18 records the canonical location for the *log line* — `staff.routes.ts` —
+      and the line did not move; only the configuration did. `console.*` is now gone from `src/` except
+      for the test harness's own startup warnings.
+
+      **Three details were carried over unchanged, and each would have failed silently.** The
+      destination stays `pino({…}, process.stdout)` with the stream named explicitly rather than left to
+      the fd default, because a module-level logger binds an fd destination at *import* time and the
+      tests that read the real line off stdout would see nothing. The `redact` paths keep their `*.`
+      forms alongside the two bare names Section 13 spells out. And there is one instance, so a field
+      is redacted everywhere or nowhere.
+
+      **A limit discovered while testing, and documented rather than papered over.** One `*` spans
+      exactly one level and `fast-redact` has no recursive wildcard, so `{req:{headers:{authorization}}}`
+      is *not* redacted — the secret sits two levels below a matched name. That is a real limit of
+      expressing "any field literally named `apiKey`" as a path list; it is acceptable here because
+      nothing in this application logs a whole request object, and every field reaching the logger is
+      written out explicitly at its call site. `src/config/logger.ts` says so, and the test asserts the
+      one-level case (which the bare paths alone would miss) rather than claiming more.
+
+      **The E8 redaction test was proving a copy.** It constructed its own `pino` instance with the
+      same options inline, so it would have kept passing had `src/config/logger.ts` lost its `redact`
+      block entirely. It now reads the application's logger. `src/config/logger.test.ts` covers the
+      configuration directly: top-level and one-level-nested redaction, an unrelated field left alone
+      (so redaction is not a blanket censor), and one parseable JSON object per line on stdout.
+      `errorHandler.test.ts` moved from spying on `console.error` to intercepting stdout, because the
+      handler logs through the real logger now. `npm test`: 446 passed, 30 files.
+- [x] T9.2.2 — Implement `GET /health`, performing a trivial DB query, for use as an external keep-warm ping target.
       Ref: ARCHITECTURE Section 16 (Mitigation — external free scheduled ping)
       Output: src/api (health route) · integration test: returns 200 when the DB is reachable, 5xx when it is not
 
+      **The mount order is the whole task.** In production `createApp()` calls `mountFrontendBundle(app)`
+      *before* the routers, and that registers a catch-all for anything not under `/api`. A `/health`
+      registered after it is never reached: production answers a health check with `index.html` and a
+      **200**. That is the worst failure mode this endpoint can have — it reports healthy no matter what
+      the database is doing, so Render would stay awake, the database would still go cold, and the
+      keep-warm ping would be the last thing to notice. `app.use('/health', healthRouter)` is therefore
+      mounted *above* the bundle, with the reason at the call site.
+
+      **Proven by removing the fix, not by the test passing.** With the mount moved back below
+      `mountFrontendBundle`, `src/api/health.production.test.ts` fails with exactly the predicted
+      symptom — `expected 'text/html; charset=UTF-8' to match /application\/json/` at status 200. That
+      test builds the app in a module graph that has never seen `NODE_ENV=test` (`vi.resetModules()` plus
+      a dynamic import), because **the assembled test app cannot see this bug at all**: the SPA branch
+      does not run outside production. It asserts both halves — `/health` answers JSON *and* a client
+      route answers the SPA shell — so a build where no catch-all existed could not pass it by accident.
+
+      **The failure case is a real unreachable database, not a stub.** A rejected `pingDatabase` mock
+      would prove the catch block is spelled correctly and nothing about whether a database that is down
+      produces that rejection. The test drops the memoized client, points the connection string at a
+      closed port, and the ping genuinely cannot connect: `PrismaClientInitializationError: Can't reach
+      database server at 127.0.0.1:1`, logged in full server-side while the response carries only
+      `{"error":"Service unavailable"}`. The failure is 503 rather than 500 because it is the answer the
+      request asked for, not an unexpected request failure — so this route deliberately does not delegate
+      to `errorHandler`, and says so.
+
+      `pingDatabase()` lives in `src/data/prismaClient.ts` (Section 18 keeps Prisma inside `src/data/`;
+      there is no entity to name, so a repository for `SELECT 1` would be a repository for nothing). The
+      endpoint is not under `/api` and Section 10's ten-endpoint table is unchanged — it is an
+      operational probe with no session and no body, not a client contract. `npm test`: 446 passed.
+
 ### Feature 9.3 — Security Verification
 
-- [ ] T9.3.1 — Verify session cookie configuration (httpOnly, Secure, SameSite=Lax) and the CSRF posture (SameSite + origin-checking on state-changing requests) end-to-end.
+- [x] T9.3.1 — Verify session cookie configuration (httpOnly, Secure, SameSite=Lax) and the CSRF posture (SameSite + origin-checking on state-changing requests) end-to-end.
       Ref: ARCHITECTURE Section 13 (Sessions, CSRF)
       Output: integration test inspecting Set-Cookie headers and rejecting a cross-origin state-changing request
-- [ ] T9.3.2 — Verify no ID-bearing student route exists and that report access is reachable only via identity re-verification.
+
+      **Reading taken: implement-then-verify, not verify.** Section 13 states the posture in one
+      sentence — *"`SameSite=Lax` plus origin-checking on state-changing requests is sufficient here"*
+      — and only the first half existed. Grepping `src/` for `origin`, `referer`, or `csrf` found
+      nothing, and `src/api/middleware/` held only the session guards, rate limiting, and body
+      validation. The browser enforces `SameSite`; nothing enforced the origin. Since a supertest
+      request carries whatever headers a test sets, a "cross-origin" POST arrives *with* the cookie
+      regardless of `SameSite` — so a test asserting refusal would have been red until the server
+      could refuse it. `src/api/middleware/requireSameOrigin.ts` is that half, mounted globally in
+      `createApp()` (it holds no per-request state, unlike the session middlewares Section 9 requires
+      per router) and before `express.json()`, so a cross-origin request is refused without spending
+      a body parse.
+
+      **The posture is exactly what Section 13 specifies, and no more.** The document considered a
+      CSRF-token scheme and rejected it as *"unjustified complexity for this threat model"*, so there
+      is no token, no double-submit cookie, and no new dependency. Safe methods are exempt because a
+      link from another site to `/assessment` is a legitimate cross-origin GET; a *missing* `Origin` is
+      allowed because non-browser clients send none and have no victim's cookie to abuse; `Origin: null`
+      is refused because it cannot be shown to be this origin.
+
+      **The test that matters is the attack, not the header.** `POST /api/staff/login` with the
+      *correct* password **and** a foreign `Origin` is refused with 403 and issued no session — every
+      other control is defeated there (the password is right, the body is valid, the route is public by
+      design), so the middleware is the only thing standing. Its complement — the same credentials from
+      this origin do get the session — is what stops a middleware that refused every login from
+      passing. `requireSameOrigin.test.ts`: 10 tests, including PATCH coverage so the guard is not
+      POST-only, the `X-Forwarded-Proto` case that makes the check depend on `trust proxy: 1`, and an
+      unparseable `Origin`.
+
+      **The cookie half.** `src/auth/session.test.ts` already proved httpOnly/SameSite/Secure on a
+      hand-built harness, and `session.routes.test.ts` already proved the student cookie's Secure
+      behaviour through the real route. What was missing was the staff cookie end to end and the
+      httpOnly/SameSite attributes read off a real route response, so both were added: the staff
+      cookie's attributes are now asserted on the real `POST /api/staff/login` (they were not covered
+      at route level at all), and the student cookie's are asserted on the real
+      `POST /api/session/student-verify`. Both include the not-Secure-over-plain-HTTP case, since
+      forcing `secure: true` would make the cookies library throw locally.
+- [x] T9.3.2 — Verify no ID-bearing student route exists and that report access is reachable only via identity re-verification.
       Ref: PRD Section 15 (NFR-SEC-009); ARCHITECTURE Section 9 (no /report/:id)
       Output: route audit + integration test confirming `/report` requires an active session, not a URL parameter
-- [ ] T9.3.3 — Verify every API boundary is validated via zod and every database write goes through Prisma's parameterized queries, with no raw SQL string concatenation anywhere.
+
+      **The audit enumerates the route table rather than sampling URLs.** Section 9's guarantee is a
+      property of what is *mounted* — *"There is deliberately no `/report/:id` or any route parameter
+      that identifies a submission"* — so `src/api/routeSurface.test.ts` walks the assembled app's
+      router stack recursively and asserts two things: every `/api/student` path is one of the four
+      Section 10 specifies and no others, and no `/api/student` path contains a `:` at all. The second
+      is the generalisation — the guarantee is about parameters, not about one route name.
+
+      **A walk that finds nothing passes everything, so the complement is a test of its own.** The
+      first two attempts at this file captured the mount path wrongly: Express records a mounted
+      router's prefix only in its mount regex, whose source is `^\/api\/student\/?(?=\/|$)` — escaped
+      slashes, and a leading `^` that is a *character* in it rather than an anchor to match at position
+      zero. The result was an empty route list, which made both assertions above pass vacuously. The
+      test that catches it asserts `/api/staff/submissions/:id` **is** found, proving the walk descends
+      into mounted routers; the escaping bug was found by exactly that assertion failing, not by
+      inspection.
+
+      **Behavioural tests, then, for what the shape is for.** Two students with submitted rows and
+      their own live sessions: an id supplied as a path segment 404s (the route does not exist, which is
+      stronger than a refusal); an id supplied as `?submissionId=`, `?id=`, or `?submission=` is simply
+      not read, and each session still receives its own report, identified by its own `submittedAt`
+      rather than by "a report came back". Re-verification is shown to be the only entry point, and the
+      wrong-name case is refused. 8 tests.
+- [x] T9.3.3 — Verify every API boundary is validated via zod and every database write goes through Prisma's parameterized queries, with no raw SQL string concatenation anywhere.
       Ref: ARCHITECTURE Section 13 (Input validation)
       Output: code review checkpoint + a CI check scanning for raw/unsafe query usage · passes
+
+      **Reading taken: there is no CI, so the check runs in the suite.** No `.github/` and no workflow
+      file exist, so T9.3.3's "CI check" has nowhere to live. `src/test/rawQueryScan.test.ts` is that
+      check, enforced by `npm test` — which is what CI would run anyway, and which cannot drift out of
+      sync with the code the way a separately-configured pipeline step can. A README-level npm script
+      was the alternative; a test is the one that actually fails a build.
+
+      **A grep for "Raw" would be wrong in both directions, and both are present here.** Flagging it
+      would catch `SubmissionRepository` and `ProcessingJobRepository`, which use `$queryRaw` /
+      `$executeRaw` as **tagged templates** — Prisma's parameterized form, where interpolated values
+      become bind parameters — for the two statements no ORM builder expresses: the atomic `jsonb ||`
+      section merge (Section 12) and the `FOR UPDATE SKIP LOCKED` job claim (Section 8). And it would
+      miss `$queryRawUnsafe`, the actual unsafe variant. So the rules are: `$queryRawUnsafe(` /
+      `$executeRawUnsafe(` refused in production code, and `$queryRaw(` / `$executeRaw(` refused *as
+      calls* — the call form takes a string, which is the shape concatenation arrives in, while the
+      tagged-template form is safe. The scan does not match table names at all, which is why it is
+      unaffected by this schema being PascalCase and quoted (`"Submission"`) rather than `snake_case`.
+
+      **Scoped to production code, deliberately.** Two places legitimately need the unsafe form and
+      both are tests: `src/test/db.ts` truncates every table discovered at runtime, so the table names
+      *are* the query; and `SubmissionRepository.test.ts` inserts a hand-written row to prove **Postgres
+      itself** rejects a duplicate `(cohortId, rollNumberNormalized)` — Section 6's guarantee, which
+      cannot be shown through the ORM being bypassed. Its values are `$1..$4` bind parameters. Neither
+      is reachable from a request, which is what Section 13's "no raw SQL string concatenation
+      anywhere" is about. Test code is therefore out of scope by file location and by name.
+
+      **Proven non-vacuous by planting a violation.** Adding an `$executeRawUnsafe` call to a throwaway
+      file under `src/data/` fails the scan with `src/data/__scanProbe.ts:2 [unsafe raw query]`, and the
+      file was removed afterwards. The complement test also asserts the safe tagged-template form exists
+      in production code, so a scan that walked no files could not pass. 2 tests; the zod half is the
+      review checkpoint below.
+
+      **Zod review checkpoint (Section 13, "every API boundary is validated via `zod`").** Every route
+      that accepts a body validates it: `POST /api/session/student-verify` and `POST /api/staff/login`
+      and `PATCH /api/student/draft` through `validateBody`; `GET /api/staff/dashboard` and
+      `GET /api/staff/export.csv` through `dashboardQuerySchema.safeParse` on the query string (a query
+      value is `string | string[] | ParsedQs`, so `?cohortId=a&cohortId=b` would otherwise reach a
+      service as an array). Two routes take no input to validate by design and are the complete
+      exception list: `POST /api/student/submit` resolves everything from the session — there is no
+      field a caller could use to name another record — and `POST /api/staff/logout` has no body. That
+      is the whole surface: ten endpoints, eight of them validated, two with nothing to validate.
 
 ### Feature 9.4 — Deployment Configuration
 
@@ -700,12 +918,94 @@ Task **identifiers are unchanged**. `T8.3.2` stays `T8.3.2` and stays listed und
       Carry-over from E3, verify on the real deployment: `app.set('trust proxy', 1)` in `src/app.ts`. Render terminates TLS at its proxy, so without it `req.protocol` reports `http` and `req.ip` is the proxy's address — the session cookies silently lose the `Secure` attribute Section 13 requires, and every student shares a single rate-limit allowance. Confirm on the live instance that a login sets a `Secure` cookie and that two different `X-Forwarded-For` values get separate rate-limit budgets. It must remain `1`, never `true`: `true` trusts a client-supplied header, which would let a student reset their own budget with every request. See `src/auth/session.ts` and `src/api/middleware/rateLimit.ts`.
       Ref: ARCHITECTURE Section 16 (Production deployment, Environment variables), Section 13 (Sessions, Rate limiting)
       Output: deployment configuration (render.yaml or documented dashboard settings) · a fresh deploy serves the built frontend and API from one process · a live check confirming a `Secure` session cookie and per-address rate-limit budgets
-- [ ] T9.4.2 — Confirm `prisma migrate deploy` runs as part of the build/release step, before the new instance serves traffic.
+
+      **NOT VERIFIED — the live half of this task could not be performed, and it is left unticked for
+      that reason.** The task has two halves and only one of them is reachable from here. No Render
+      account or instance was available to this session, so the required live check — a deployed
+      service setting a `Secure` session cookie, and two `X-Forwarded-For` values receiving separate
+      rate-limit budgets — was not performed. Ticking this on the strength of the code being correct is
+      precisely the mistake the task was written to prevent: both defects it looks for are **silent**,
+      and both are invisible outside a real proxy hop.
+
+      **What was delivered.** `render.yaml` at the repository root: one free web service, build command
+      `npm ci && npx prisma generate && npm run build && npx prisma migrate deploy`, start command
+      `node dist/server.js`, and Section 16's five environment variables with the three secrets marked
+      `sync: false` so Render prompts for them rather than storing them in a committed file. No
+      `healthCheckPath`, deliberately: pointing Render's health check at `/health` would turn a database
+      outage into a deploy failure rather than a degraded service, and that endpoint exists for the
+      optional external ping instead. The file carries a header stating plainly that it is unverified
+      against a live deploy.
+
+      **`trust proxy` is already correct in code, and the reasoning is in a comment at the call site.**
+      `src/app.ts` sets `app.set('trust proxy', 1)`, so the E3 carry-over is satisfied as written; what
+      remains is only its confirmation on a live instance. The setting is load-bearing in three places,
+      all now covered by tests that would catch it being weakened: the `Secure` cookie attribute
+      (`session.routes.test.ts`, `staff.routes.test.ts`), per-address rate limiting
+      (`rateLimit.routes.test.ts`), and — new in E9 — origin checking, where an
+      `https://` page would be refused as cross-origin without it (`requireSameOrigin.test.ts`).
+
+      **The local half is verified.** `npm run build` succeeds, and
+      `node dist/verify-production-boot.mjs` (gitignored scratch, re-runnable after `npm run build`)
+      boots `dist/server.js` under `NODE_ENV=production` behind
+      the same commands `render.yaml` names, then checks the result: structured JSON on stdout from the
+      real logger (`worker_started`, `content_versions_loaded`, `server_listening`), `/health` → `200
+      {"status":"ok"}`, `/assessment` → `200 text/html` (the built SPA shell), and `/api/student/draft`
+      without a session → `401 application/json`. One process, both surfaces. The same script prints the
+      paragraph above rather than a pass, so a green run cannot be mistaken for the live check.
+- [x] T9.4.2 — Confirm `prisma migrate deploy` runs as part of the build/release step, before the new instance serves traffic.
       Ref: ARCHITECTURE Section 16 (Database migrations)
       Output: build/release script · the deploy log shows the migration step completing before the server starts
-- [ ] T9.4.3 — Document the optional external keep-warm ping (e.g. a GitHub Actions workflow hitting `/health` every ~10 minutes) as an operational runbook note.
+
+      **Where it runs, and why there.** `render.yaml`'s build command ends with `npx prisma migrate
+      deploy`, which is Section 16's *"as part of the Render build/release step, before the new instance
+      starts serving traffic"* — the build completes before the instance is released. Render's
+      `preDeployCommand` hook would express the same ordering more explicitly but is not available on
+      every plan, and Section 16's $0 constraint fixes the plan, so the build command is where it goes.
+
+      **It is placed *after* `npm run build`, not before.** Both positions satisfy Section 16; this one
+      additionally means a compile error aborts the deploy *without* having already migrated the
+      database. The other order leaves production running the old build against a newer schema, which
+      is survivable for additive migrations and not worth the risk for any other kind when the fix is
+      one reordering. `migrate deploy` applies committed migration files only — it never generates,
+      resets, or prompts — so it is safe unattended.
+
+      **Verified locally for the ordering that matters.** `node dist/verify-production-boot.mjs` runs
+      `prisma migrate deploy` first and then boots the server, printing `1 migration found in
+      prisma/migrations · No pending migrations to apply.` and `PASS migrate deploy exit code: 0` ahead
+      of the `server_listening` line — the same sequence the deploy log would show. **The gap, stated
+      plainly:** no Render deploy log was observed, because no Render instance was reachable from this
+      session. This confirms the command and its ordering, not a live deployment.
+
+      **The reason this task exists at all.** `npm ci && npm run build` never generated the Prisma
+      client — there is no `postinstall` and no `prisma generate` in any script — so a clean Render
+      build compiled `tsc` against a `@prisma/client` whose generated types did not exist. It worked on
+      developer machines only because `prisma generate` had been run by hand at some point. `npx prisma
+      generate` is now the first step of the build command, ahead of `npm run build`, and the reason is
+      written next to it.
+- [x] T9.4.3 — Document the optional external keep-warm ping (e.g. a GitHub Actions workflow hitting `/health` every ~10 minutes) as an operational runbook note.
       Ref: ARCHITECTURE Section 16 (Mitigation for both)
       Output: README/runbook section · documented as optional, not required for MVP function
+
+      **`docs/RUNBOOK.md`**, a new file — the repository had no README or runbook to add a section to.
+      It documents the deployment settings that `render.yaml` encodes (so the service can be configured
+      by hand instead, which T9.4.1's Output allows as an alternative), the two log lines worth knowing
+      by name, the health endpoint, and the keep-warm ping.
+
+      **The ping is documented as optional, in Section 16's own terms.** Section 16 calls it *"an
+      **optional operational mitigation** available if the pilot's actual usage pattern turns out to
+      have idle gaps longer than a few days; it is not required for the architecture to function."* The
+      runbook says that first and says the pilot works without it, then names the two thresholds that
+      would justify it — Render's ~15-minute sleep and Supabase's 7-day pause — so the decision is made
+      against observed behaviour rather than set up "just in case".
+
+      **Documented, not implemented — deliberately.** The example is a GitHub Actions workflow in the
+      runbook text, and no `.github/workflows/` file was created: the task says *document*, and adding a
+      scheduled workflow would be introducing infrastructure the architecture does not require, into a
+      repository that has no CI at all (T9.3.3). The two flags that make the example safe are called out
+      — `--max-time 90`, because a timeout shorter than Render's 30–60 second wake would fail a request
+      that is working, and `--fail`, so a `503` from a cold database is a failed run rather than a
+      silent success. That last point is the whole distinction between this and a ping that reports
+      healthy no matter what.
 
 ---
 

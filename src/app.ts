@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
 import type { Express } from 'express';
+import { errorHandler } from './api/middleware/errorHandler.ts';
+import { requireSameOrigin } from './api/middleware/requireSameOrigin.ts';
+import { healthRouter } from './api/health.routes.ts';
 import { sessionRouter } from './api/session.routes.ts';
 import { staffRouter } from './api/staff.routes.ts';
 import { studentRouter } from './api/student.routes.ts';
@@ -63,9 +66,31 @@ export function createApp(): Express {
   // exposed directly would need `false`, since the header would then be client-controlled.
   app.set('trust proxy', 1);
 
+  // Origin-checking for state-changing requests (T9.3.1) — the second half of Section 13's CSRF
+  // posture, whose first half is the `SameSite=Lax` on both session cookies (`src/auth/session.ts`).
+  //
+  // Mounted globally rather than per router, and before `express.json()`: unlike the session
+  // middlewares, which Section 9 requires per router because two `cookie-session` instances would
+  // collide on `req.session`, this one holds no per-request state. A refusal here costs no body parse
+  // and no route work, which is the point — a cross-origin request is stopped before it can reach
+  // anything that reads, writes, or issues a session.
+  app.use(requireSameOrigin);
+
   // Parses JSON bodies. It does not trust them — every API boundary validates its body against a
   // zod schema via validateBody (T3.2.3) before the payload reaches a domain service.
   app.use(express.json());
+
+  // Mounted before the frontend bundle, and the order is the whole reason this line is here rather
+  // than with the other routers below. In production `mountFrontendBundle` registers
+  // `app.get(/^\/(?!api(?:\/|$)).*/, …)` — a catch-all for anything not under `/api` — so a `/health`
+  // registered after it is never reached: production would answer a health check with `index.html`
+  // and a 200, reporting healthy no matter what the database was doing. That is the worst possible
+  // failure mode for the keep-warm ping this endpoint exists to serve (ARCHITECTURE Section 16), and
+  // it is invisible outside production, because the SPA branch does not run under NODE_ENV=test.
+  //
+  // The endpoint is deliberately not under `/api`: it is an operational probe with no session and no
+  // body, not a member of Section 10's ten-endpoint contract.
+  app.use('/health', healthRouter);
 
   if (env.NODE_ENV === 'production') {
     mountFrontendBundle(app);
@@ -74,6 +99,13 @@ export function createApp(): Express {
   app.use('/api/session', sessionRouter);
   app.use('/api/student', studentRouter);
   app.use('/api/staff', staffRouter);
+
+  // Mounted last, after every router (T9.1.1). Express walks error middleware in registration order
+  // and only the middleware registered *after* the one that failed is reached, so an error handler
+  // mounted above would never see an error raised below it — and every `next(error)` in the routes
+  // above would continue to fall through to Express's built-in handler, which answers `text/html`
+  // with a stack trace outside production (ARCHITECTURE Section 11).
+  app.use(errorHandler);
 
   return app;
 }

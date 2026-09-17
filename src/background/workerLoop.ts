@@ -73,8 +73,8 @@ export type WorkerLoopDeps = {
    *
    * Required rather than defaulted to `console.error`, because this is the only thing the loop says
    * out loud and a caller that has not thought about where it goes should not get silence by
-   * accident. `src/server.ts` supplies the process logger (structured `pino` output from T9.2.1);
-   * tests supply a recorder.
+   * accident. `src/server.ts` supplies the process logger (the structured `pino` instance configured
+   * in `src/config/logger.ts`, T9.2.1); tests supply a recorder.
    */
   onError: (error: unknown, jobId: string | null) => void;
   /** Overrides for `DEFAULT_WORKER_SETTINGS`; a test sets these small. */

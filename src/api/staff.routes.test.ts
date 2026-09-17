@@ -4,6 +4,7 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.ts';
 import { hashPassword } from '../auth/passwordHasher.ts';
+import { logger } from '../config/logger.ts';
 import {
   STAFF_SESSION_COOKIE,
   STUDENT_SESSION_COOKIE,
@@ -646,10 +647,16 @@ describe('GET /api/staff/submissions/:id', () => {
   it('never logs the Ollama API key, even if one reaches a log call (Section 13)', async () => {
     // Defence in depth: the key is read only inside `OllamaProvider` and never passed here, so this
     // exercises the redaction configuration itself rather than a code path that could leak it.
+    //
+    // Against the *application's* logger, not a local `pino` instance carrying a copy of the same
+    // options. E8's version of this test constructed its own instance, which meant it would keep
+    // passing if `src/config/logger.ts` lost its `redact` block entirely — it proved the copy. Now
+    // that the configuration lives in exactly one place (T9.2.1), the test reads that place.
     const { output } = await captureStdout(async () => {
-      const { default: pino } = await import('pino');
-      pino({ redact: { paths: ['apiKey', 'authorization', '*.apiKey', '*.authorization'], censor: '[Redacted]' } })
-        .info({ apiKey: 'sk-live-secret', nested: { authorization: 'Bearer sk-live-secret' } }, 'probe');
+      logger.info(
+        { apiKey: 'sk-live-secret', nested: { authorization: 'Bearer sk-live-secret' } },
+        'probe',
+      );
     });
 
     expect(output).not.toContain('sk-live-secret');
@@ -914,5 +921,58 @@ describe('GET /api/staff/export.csv', () => {
     const { output } = await captureStdout(() => agent.get('/api/staff/export.csv').expect(200));
 
     expect(accessLines(output)).toEqual([]);
+  });
+});
+
+/**
+ * The staff session cookie's attributes, asserted end to end (T9.3.1).
+ *
+ * ARCHITECTURE Section 13: *"httpOnly, `Secure`, `SameSite=Lax` cookies for both staff and student
+ * sessions."* `src/auth/session.test.ts` proves the configuration on a hand-built harness; this proves
+ * it survives the real router — the global origin check (T9.3.1), the body validation, the auth
+ * service, and `issueStaffSession` — because a cookie attribute that only holds in a harness is not a
+ * property of the application.
+ *
+ * The Secure half is the one that cannot be checked locally and must be checked through the proxy
+ * shape: `Secure` is set from `req.protocol`, which reports `https` only because `src/app.ts` sets
+ * `trust proxy: 1` (T9.4.1). Without that setting the attribute would silently vanish in production
+ * while every local test kept passing.
+ */
+describe('the staff session cookie (Section 13)', () => {
+  it('is HttpOnly and SameSite=Lax', async () => {
+    await createStaff();
+
+    const response = await request(createApp())
+      .post('/api/staff/login')
+      .send({ email: EMAIL, password: PASSWORD })
+      .expect(200);
+
+    const cookie = setCookieFor(response, STAFF_SESSION_COOKIE);
+
+    expect(cookie).toBeDefined();
+    expect(cookie).toContain('httponly');
+    expect(cookie?.toLowerCase()).toContain('samesite=lax');
+  });
+
+  it('is Secure when the proxy reports TLS, and not before', async () => {
+    await createStaff();
+    const app = createApp();
+
+    const overTls = await request(app)
+      .post('/api/staff/login')
+      .set('X-Forwarded-Proto', 'https')
+      .send({ email: EMAIL, password: PASSWORD })
+      .expect(200);
+
+    expect(setCookieFor(overTls, STAFF_SESSION_COOKIE)).toContain('; secure');
+
+    // Plain HTTP is local development. Forcing `secure: true` here would make the cookies library
+    // throw outright, which is why the attribute is derived from the connection instead.
+    const direct = await request(app)
+      .post('/api/staff/login')
+      .send({ email: EMAIL, password: PASSWORD })
+      .expect(200);
+
+    expect(setCookieFor(direct, STAFF_SESSION_COOKIE)).not.toContain('secure');
   });
 });
