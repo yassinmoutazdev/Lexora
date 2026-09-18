@@ -1009,6 +1009,93 @@ Task **identifiers are unchanged**. `T8.3.2` stays `T8.3.2` and stays listed und
 
 ---
 
+## Open Items Carried Into E10 — AI Prompt & Context Audit
+
+**This is a register, not an Epic.** It records what an audit of the two AI evaluation prompts
+(`evaluateWriting`, `processStudentProblemsText`) left unresolved, so the state lives where the plan's
+state lives rather than only in commit messages. The audit's fixes are on `ai-prompt-audit` based on
+`ca3a12a`.
+
+**Nothing here blocks E10.** Each item is either a content decision that belongs to the team, an
+accepted risk with its reasoning recorded, or a measurement to revisit against real pilot data. What
+several of them do block is **running the pilot**, which is why they are written down rather than left
+in a commit body.
+
+### Content awaiting team sign-off before the pilot
+
+All three are `contentStatus: "provisional"` with a `statusNote` naming the PRD Section 23.1 item that
+defers them. The pattern is deliberate — provisional content ships clearly labelled — so none of these
+is a build defect. They are the three things a student's score depends on that nobody has approved.
+
+| Item | Where | State |
+|---|---|---|
+| Rubric weights | `writing-rubric.json` → `weights` | `20/20/20/20/20` is a placeholder so the scoring formula has a testable input. PRD Section 23.1 item 1. |
+| Free-writing task prompt | `writing-prompt.json` → `task` | A development stand-in of the approved shape. PRD Section 23.1 item 2. |
+| Band descriptors | `writing-rubric.json` → `bands` | **New in the audit.** A first proposal written to a structure the team agreed (four bands, per criterion); the PRD does not specify anchors at all. These are the most calibration-sensitive content in the file — they are what makes a 55 mean the same thing for two students. |
+
+### Open decisions
+
+1. **`temperature: 0` does not deliver determinism.** Measured live against `gemma4:31b-cloud`: two
+   identical calls with the same prompt returned `sentenceStructure` 75 and 70, with different
+   corrections; the other four criteria matched. So the sampling choice reduces variation but does not
+   remove it, and the rationale recorded in `OllamaProvider.ts` is weaker than it reads. Options: keep
+   `0` as the lower-variance choice, adopt the model's published `temperature=1.0 / top_p=0.95 /
+   top_k=64`, or accept the variance as inherent to a cloud endpoint. **Closes with:** a calibration run
+   over real essays, not with reasoning.
+
+2. **Category comparability across students.** The dashboard counts AI categories by exact label string
+   (`DashboardRepository.derivedCategoryCounts`, `GROUP BY category ->> 'label'`), while `label` is the
+   model's own free-form wording. The prompt now asks for consistent, reusable wording and no
+   near-duplicates, and a live check produced three well-formed reusable labels — but nothing enforces
+   it. **Make it exact** requires a controlled vocabulary, which requires the Student Problems call to
+   receive versioned instruction text, and its signature is fixed as `processStudentProblemsText(text)`.
+   That is an architecture change, and PRD Section 23.2 item 5 defers the aggregation strategy anyway.
+   **Decide:** does the pilot need cross-student comparability, or is the prompt instruction enough?
+
+3. **Schema-level enforcement of `maxCorrections`.** FR-WRITE-008's cap is now enforced — but in
+   `JobService.completeJob`, by truncation against the submission's frozen rubric, not by
+   `src/ai/schemas.ts`. That is deliberate: the schema layer cannot see a content version, and the
+   file's own documentation records that a cap compiled in there would be a code copy that drifts the
+   first time a v2 changes it. **Decide:** is enforcement in the job layer sufficient, or should the
+   validation boundary be parameterized by the frozen rubric?
+
+4. **Which model.** The tag is settled and verified (`gemma4:31b-cloud`; the plausible mis-spelling
+   `gemma4:b31-cloud` does not exist). The *choice* is still PRD Section 23.2 item 4's. Cost from the
+   model page: `$0.14/1M` input, `$0.40/1M` output.
+
+### Accepted risks, with the reasoning recorded
+
+- **Prompt injection is not mitigated.** Student text is concatenated into the user message behind
+  `---` delimiters. Section 13's threat model is explicitly a small, non-adversarial pilot, the
+  realistic worst case is a student affecting only their own record, and every available mitigation
+  costs more than the exposure — stripping instruction-like phrases would corrupt legitimate essays that
+  quote instructions. Not a gap; a decision.
+- **Validation failures carry no structural diagnostics.** `AIValidationError` reports zod issue paths
+  but not the shape of what came back. Key names and response length are available within the
+  no-student-text invariant; deliberately not implemented, because it touches the message
+  `src/ai/errors.ts` is most careful about. Revisit if `failed_needs_review` rates are hard to
+  diagnose in the pilot.
+- **zod's `unrecognized_keys` writes model-authored key names into `ProcessingJob.lastError`.** Bounded
+  by `MAX_LAST_ERROR_LENGTH` (500). Left as-is: it is the single most useful diagnostic for a
+  wrong-shape response, and the value is a key name rather than student text.
+- **`scoreRange.min` is authored but read by nothing,** while `src/ai/schemas.ts` hardcodes the `0`–`100`
+  bounds as literals. Inert today — a changed range would fail loudly in `WritingScoreCalculator`, not
+  silently — and structurally the same constraint as item 3.
+- **Grounding is measured, not gated.** Live check: 8 of 8 corrections quoted the source verbatim and
+  3 of 3 Arabic category quotes were grounded and in the student's own language. A grounding gate would
+  trade a silent quality problem for a loud availability problem on evidence that does not show the
+  quality problem exists. Revisit only if real data disagrees.
+
+### Already settled by the audit — recorded so they are not reopened
+
+The composed writing prompt now states the JSON keys the strict schema requires, the task the response
+is graded against, the scoring anchors, the criterion keys, the score range, and the correction cap —
+all derived from the frozen content bundle rather than restated in code. Each evaluation call sends its
+own system prompt. `format: 'json'` is no longer assumed to return a bare body. A 404 for an unknown
+model is a named failure that says which model was requested.
+
+---
+
 ## E10 — Final QA & End-to-End Verification
 
 **Rationale:** Validates the complete pilot against the PRD's critical flows and edge cases before the MVP is considered ship-ready.

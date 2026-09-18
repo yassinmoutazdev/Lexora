@@ -260,6 +260,73 @@ describe('writingRubricFileSchema', () => {
 
     expect(writingRubricFileSchema.safeParse(file).success).toBe(false);
   });
+
+  /**
+   * The band anchors (F10 of the prompt audit). These are the calibration the model scores against,
+   * and every failure below is one that would otherwise reach the model as a criterion it
+   * calibrates by guesswork — with no other check anywhere noticing, because a guessed score is
+   * still a valid score. Hence validation at load rather than prose in `instructions`.
+   */
+  describe('band anchors', () => {
+    const messages = (file: unknown): string[] =>
+      (writingRubricFileSchema.safeParse(file).error?.issues ?? []).map((issue) => issue.message);
+
+    it('accepts the committed bands, and they tile the score range', () => {
+      const parsed = writingRubricFileSchema.safeParse(readJson('writing-rubric.json'));
+
+      expect(parsed.success).toBe(true);
+
+      const { definitions } = parsed.data!.bands;
+      expect(definitions[0]!.min).toBe(parsed.data!.scoreRange.min);
+      expect(definitions[definitions.length - 1]!.max).toBe(parsed.data!.scoreRange.max);
+    });
+
+    it('rejects a criterion with no descriptor at one band', () => {
+      const file = cloneJson('writing-rubric.json');
+      delete file.bands.descriptors.grammarAccuracy.Competent;
+
+      expect(messages(file)).toContain('no descriptor at band(s): Competent');
+    });
+
+    it('rejects a criterion with no descriptor block at all', () => {
+      const file = cloneJson('writing-rubric.json');
+      delete file.bands.descriptors.coherence;
+
+      expect(messages(file)).toContain('no band descriptors for criterion(s): coherence');
+    });
+
+    it('rejects a descriptor for a band that is not defined', () => {
+      const file = cloneJson('writing-rubric.json');
+      file.bands.descriptors.vocabulary.Excellent = 'A band nothing defines.';
+
+      expect(messages(file)).toContain('descriptor given for unknown band(s): Excellent');
+    });
+
+    it('rejects band definitions that leave a gap in the score range', () => {
+      const file = cloneJson('writing-rubric.json');
+      file.bands.definitions[1].min = 45; // 40–44 now belongs to no band
+
+      expect(messages(file).some((message) => message.includes('contiguous'))).toBe(true);
+    });
+
+    it('rejects band definitions that do not reach the top of the score range', () => {
+      const file = cloneJson('writing-rubric.json');
+      file.bands.definitions[3].max = 99;
+
+      expect(
+        messages(file).some((message) => message.includes('must end at scoreRange.max')),
+      ).toBe(true);
+    });
+
+    it('rejects duplicate band names', () => {
+      const file = cloneJson('writing-rubric.json');
+      file.bands.definitions[2].name = 'Developing';
+
+      expect(
+        messages(file).some((message) => message.includes('duplicate band name')),
+      ).toBe(true);
+    });
+  });
 });
 
 describe('studentProblemsFileSchema', () => {

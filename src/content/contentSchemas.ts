@@ -244,6 +244,41 @@ export const writingRubricFileSchema = z
       })
       .strict(),
     instructions: z.string().min(1),
+    /**
+     * The score scale's anchors: what each criterion looks like at each level.
+     *
+     * Boundaries and names are declared **once**, and the per-criterion descriptors are keyed by
+     * band name — rather than each criterion carrying its own `{ min, max, name }`. Five copies of
+     * the same four boundaries would be five statements of one content decision, and the first
+     * version to move a boundary would have to move it identically in five places or the rubric
+     * would disagree with itself about what "Competent" means. Here the agreement is structural.
+     *
+     * This is validated rather than free prose in `instructions` for the reason the file records
+     * throughout: a criterion with no descriptor at some band is not a cosmetic gap, it is a
+     * criterion the model calibrates by guesswork — and nothing else in the system would notice,
+     * because a guessed score is still a valid score. The checks in the `superRefine` below make
+     * that state unrepresentable at boot.
+     */
+    bands: z
+      .object({
+        definitions: z
+          .array(
+            z
+              .object({
+                name: z.string().min(1),
+                min: z.number(),
+                max: z.number(),
+              })
+              .strict(),
+          )
+          .min(1),
+        /** Criterion key → band name → what that criterion looks like at that band. */
+        descriptors: z.record(
+          z.string().min(1),
+          z.record(z.string().min(1), z.string().min(1)),
+        ),
+      })
+      .strict(),
     outputRequirements: z
       .object({
         criterionRationaleRequired: z.boolean(),
@@ -300,6 +335,110 @@ export const writingRubricFileSchema = z
         path: ['weights'],
         message: `weights must sum to 100, got ${total}`,
       });
+    }
+
+    // --- band anchors ---------------------------------------------------------
+    //
+    // Three things have to hold for the scale to mean anything: the bands must tile the score
+    // range exactly once, every criterion must have a descriptor at every band, and neither side
+    // may name something the other does not have. Each is checked here so the failure is a boot
+    // error naming the gap, rather than a criterion the model silently calibrates by guessing.
+    const bandNames = rubric.bands.definitions.map((band) => band.name);
+
+    const duplicateBand = bandNames.find((name, index) => bandNames.indexOf(name) !== index);
+    if (duplicateBand) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bands', 'definitions'],
+        message: `duplicate band name ${JSON.stringify(duplicateBand)}`,
+      });
+    }
+
+    for (const [index, band] of rubric.bands.definitions.entries()) {
+      if (band.min >= band.max) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['bands', 'definitions', index],
+          message: `band ${JSON.stringify(band.name)} must have min less than max`,
+        });
+      }
+    }
+
+    // Contiguity is checked against the *sorted* bands, so a file may list them in any order.
+    const orderedBands = [...rubric.bands.definitions].sort((a, b) => a.min - b.min);
+    const firstBand = orderedBands[0];
+    const lastBand = orderedBands[orderedBands.length - 1];
+
+    if (firstBand && firstBand.min !== rubric.scoreRange.min) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bands', 'definitions'],
+        message: `bands must start at scoreRange.min (${rubric.scoreRange.min}), got ${firstBand.min}`,
+      });
+    }
+    if (lastBand && lastBand.max !== rubric.scoreRange.max) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bands', 'definitions'],
+        message: `bands must end at scoreRange.max (${rubric.scoreRange.max}), got ${lastBand.max}`,
+      });
+    }
+
+    for (let index = 1; index < orderedBands.length; index += 1) {
+      const previous = orderedBands[index - 1]!;
+      const current = orderedBands[index]!;
+
+      // Integer bands are contiguous when the next starts one above where the previous ended; the
+      // epsilon is only there so a fractional boundary is not rejected by float representation.
+      if (Math.abs(current.min - (previous.max + 1)) > 1e-9) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['bands', 'definitions'],
+          message:
+            `bands must be contiguous: ${JSON.stringify(previous.name)} ends at ${previous.max} ` +
+            `but ${JSON.stringify(current.name)} starts at ${current.min}`,
+        });
+      }
+    }
+
+    const descriptorKeys = Object.keys(rubric.bands.descriptors);
+    const missingDescriptorBlocks = keys.filter((key) => !descriptorKeys.includes(key));
+    const unknownDescriptorBlocks = descriptorKeys.filter((key) => !keys.includes(key));
+
+    if (missingDescriptorBlocks.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bands', 'descriptors'],
+        message: `no band descriptors for criterion(s): ${missingDescriptorBlocks.join(', ')}`,
+      });
+    }
+    if (unknownDescriptorBlocks.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bands', 'descriptors'],
+        message: `band descriptors given for unknown criterion(s): ${unknownDescriptorBlocks.join(', ')}`,
+      });
+    }
+
+    for (const [criterionKey, byBand] of Object.entries(rubric.bands.descriptors)) {
+      const provided = Object.keys(byBand);
+      const missingBands = bandNames.filter((name) => !provided.includes(name));
+      const unknownBands = provided.filter((name) => !bandNames.includes(name));
+
+      if (missingBands.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['bands', 'descriptors', criterionKey],
+          message: `no descriptor at band(s): ${missingBands.join(', ')}`,
+        });
+      }
+      if (unknownBands.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['bands', 'descriptors', criterionKey],
+          message: `descriptor given for unknown band(s): ${unknownBands.join(', ')}`,
+        });
+      }
     }
   });
 

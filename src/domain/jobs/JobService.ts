@@ -1,5 +1,9 @@
 import type { ProcessingJob } from '@prisma/client';
-import type { StudentProblemsAnalysis, WritingEvaluation } from '../../ai/AIEvaluationService.ts';
+import type {
+  StudentProblemsAnalysis,
+  WritingCorrection,
+  WritingEvaluation,
+} from '../../ai/AIEvaluationService.ts';
 import { AIError, AIValidationError } from '../../ai/errors.ts';
 import { getContentLoader, type ContentLoader } from '../../content/ContentLoader.ts';
 import { processingJobRepository, type ProcessingJobRepository } from '../../data/ProcessingJobRepository.ts';
@@ -219,7 +223,10 @@ export class JobService {
           feedback: {
             strengths: evaluation.strengths,
             weaknesses: evaluation.weaknesses,
-            corrections: evaluation.corrections,
+            corrections: capCorrections(
+              evaluation.corrections,
+              content.writingRubric.outputRequirements.maxCorrections,
+            ),
             suggestions: evaluation.suggestions,
           },
         });
@@ -317,6 +324,42 @@ export class JobService {
       await this.deps.submissions.markProblemsTextNeedsReview(tx, job.submissionId);
     }
   }
+}
+
+/**
+ * Trims the returned corrections to the cap the submission's own rubric authors.
+ *
+ * FR-WRITE-008 requires writing feedback to be *"lightweight — not an exhaustive per-sentence or
+ * per-error analysis"*, and `writing-rubric.json` states that as `outputRequirements.maxCorrections`.
+ * The prompt tells the model the limit (`ContentLoader` composes it in from the same field), but a
+ * prompt is an instruction, not an enforcement — a model that returns twelve corrections would
+ * otherwise have all twelve persisted and shown to the student.
+ *
+ * ## Why this belongs here, and why it truncates instead of refusing
+ *
+ * This is the only place that holds both the result and the submission's **frozen** rubric, which
+ * is what makes the cap applicable at all: `src/ai/schemas.ts` validates before any version is in
+ * scope, and its own documentation records that a cap compiled in there would be a code copy of a
+ * content value that drifts the first time a v2 changes it.
+ *
+ * Refusing an overage — failing the evaluation — would turn a cosmetic excess into
+ * `failed_needs_review`, showing the student "processing failed" for a response that was graded
+ * correctly. Truncating cannot produce a wrong result, only a shorter list than the model offered,
+ * which is what the requirement asks for. That is the difference from `computeOverallScore`, which
+ * throws when a weighted criterion is missing: a missing criterion shrinks the total into a
+ * *plausible but wrong* number, and silently wrong is worse than loudly refused. Extra corrections
+ * have no such failure mode.
+ *
+ * The model's own order is preserved, because the rubric asks it for the *most valuable*
+ * corrections — the earliest ones are the ones it judged to matter most.
+ */
+function capCorrections(
+  corrections: WritingCorrection[],
+  maxCorrections: number,
+): WritingCorrection[] {
+  return corrections.length <= maxCorrections
+    ? corrections
+    : corrections.slice(0, maxCorrections);
 }
 
 /**

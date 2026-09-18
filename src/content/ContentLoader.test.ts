@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
+import { writingEvaluationSchema } from '../ai/schemas.ts';
 import { REPO_ROOT } from '../config/env.ts';
 import { ContentLoader, ContentValidationError } from './ContentLoader.ts';
 
@@ -67,11 +68,75 @@ describe('ContentLoader against the committed content', () => {
     expect(content.reading.passages.length).toBeGreaterThan(0);
   });
 
-  it('projects the rubric instructions and weights the worker consumes', () => {
+  it('projects the rubric weights the worker consumes', () => {
     const content = loader.getContent('v1');
 
-    expect(content.writingRubricInstructions).toBe(content.writingRubric.instructions);
     expect(content.writingRubricWeights).toEqual(content.writingRubric.weights);
+  });
+
+  /**
+   * The composed prompt is the whole of what the model is told, so this asserts it carries the three
+   * things a usable one needs: the authored rubric, the task the response is graded against, and the
+   * output contract its JSON must satisfy.
+   *
+   * Each expectation is derived from the content bundle or the schema rather than written out as
+   * prose, which is the point: it fails if a criterion key is renamed, if the task is reworded, or —
+   * the case that motivated the composition — if `writingEvaluationSchema` gains a top-level key that
+   * nobody told the model about. Asserting literal sentences would only prove the strings still
+   * match themselves.
+   */
+  it('composes the writing prompt from the rubric, the task, and the output contract', () => {
+    const content = loader.getContent('v1');
+    const composed = content.writingRubricInstructions;
+
+    // The authored rubric text, carried through unchanged.
+    expect(composed).toContain(content.writingRubric.instructions);
+
+    // The task, which `taskCompletion` is defined in terms of ("addresses the prompt", "meets the
+    // expected length") and which used to be resolved and then never sent.
+    expect(composed).toContain(content.writingPrompt.task.prompt);
+    expect(composed).toContain(content.writingPrompt.task.guidance);
+
+    // Every top-level key the strict schema requires. Derived from the schema, because a response
+    // that guesses a key name fails validation outright — this is the assertion that would have
+    // caught the missing output contract.
+    const requiredKeys = Object.keys(
+      (writingEvaluationSchema as unknown as { shape: Record<string, unknown> }).shape,
+    );
+    for (const key of requiredKeys) {
+      expect(composed).toContain(key);
+    }
+
+    // The authored description of each of those keys, quoted rather than restated in code.
+    for (const description of Object.values(content.writingRubric.outputRequirements.fields)) {
+      expect(composed).toContain(description);
+    }
+
+    // The nested field names the schema requires inside those keys.
+    for (const field of ['score', 'rationale', 'original', 'corrected', 'explanation']) {
+      expect(composed).toContain(field);
+    }
+
+    // The scoring anchors: every criterion's descriptor at every band, so no criterion reaches the
+    // model with a scale it has to invent. Derived from the content, so a descriptor reworded or a
+    // band renamed is carried into the prompt rather than leaving it stale.
+    for (const [criterionKey, byBand] of Object.entries(content.writingRubric.bands.descriptors)) {
+      for (const [bandName, descriptor] of Object.entries(byBand)) {
+        expect(composed).toContain(criterionKey);
+        expect(composed).toContain(`${bandName}): ${descriptor}`);
+      }
+    }
+
+    for (const band of content.writingRubric.bands.definitions) {
+      expect(composed).toContain(`${band.min}–${band.max} (${band.name})`);
+    }
+
+    // Every criterion key, the correction cap, and the score range — all read from the rubric.
+    for (const criterion of content.writingRubric.criteria) {
+      expect(composed).toContain(criterion.key);
+    }
+    expect(composed).toContain(String(content.writingRubric.outputRequirements.maxCorrections));
+    expect(composed).toContain(`${content.writingRubric.scoreRange.min} and ${content.writingRubric.scoreRange.max}`);
   });
 
   it('throws for a version that was never loaded instead of falling back to current', () => {

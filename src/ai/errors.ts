@@ -91,3 +91,33 @@ export class AINonRetryableError extends AIError {
   override readonly name = 'AINonRetryableError';
   override readonly retryable = false;
 }
+
+/**
+ * The provider does not serve the model this deployment asked for.
+ *
+ * A subclass of the non-retryable case rather than a retryable one, because the classification is
+ * not in doubt: a model tag that does not exist will not exist on the next attempt either, and
+ * `JobService` already routes any non-retryable `AIError` straight to `failed_needs_review` without
+ * spending an attempt.
+ *
+ * ## Why it is named separately
+ *
+ * `OllamaProvider.chatEndpoint` records the trap this shares with a malformed `OLLAMA_BASE_URL`: a
+ * 404 becomes a non-retryable failure, so *"a misconfiguration … looks from the dashboard exactly
+ * like a provider refusing to grade."* Reusing `AINonRetryableError` for this leaves that symptom
+ * unchanged — every job in the queue fails at once, and the only way to tell a wrong model tag from
+ * a genuinely broken provider is to read a truncated JSON error body out of `ProcessingJob.lastError`
+ * and parse it by eye.
+ *
+ * Naming the case is what makes the misconfiguration diagnosable, and at the pilot's scale it is the
+ * *likely* failure: `MODEL_NAME` is a single constant the deployment has already had to change once,
+ * and getting it wrong is a one-line mistake whose only symptom is that nothing grades.
+ *
+ * The message names the model and the two settings that produce it. Neither is a secret — the model
+ * tag appears in no credential, and `OLLAMA_BASE_URL`'s value is not the API key — so this does not
+ * weaken the rule in the file header above. The API key is still never in a message.
+ */
+export class AIModelNotFoundError extends AIError {
+  override readonly name = 'AIModelNotFoundError';
+  override readonly retryable = false;
+}

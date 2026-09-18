@@ -139,10 +139,20 @@ export interface AIEvaluationService {
    *
    * @param responseText The student's writing, resolved from the Submission row — never from the
    *   job (Section 8), and never anything the client sent on this request.
-   * @param rubricInstructions The authored rubric text from the submission's **frozen**
-   *   `contentVersion` (`writing-rubric.json` → `ContentLoader.writingRubricInstructions`). Passed in
-   *   rather than read by the provider, so the provider cannot resolve "current" content and grade a
-   *   response against a rubric its student was never given (Section 2, Section 12).
+   * @param rubricInstructions The evaluation prompt from the submission's **frozen**
+   *   `contentVersion` (`ContentLoader.writingRubricInstructions`). Passed in rather than read by the
+   *   provider, so the provider cannot resolve "current" content and grade a response against a
+   *   rubric its student was never given (Section 2, Section 12).
+   *
+   *   The parameter keeps its name, but what arrives is a composed projection of that version's
+   *   `writing-rubric.json` **and** `writing-prompt.json`: the authored rubric instructions, the task
+   *   the response answers, and the output contract its JSON must satisfy. The task is included
+   *   because `taskCompletion` is defined in terms of it — *"addresses the prompt … meets the
+   *   expected length"* — and a provider cannot judge that criterion without the prompt and the
+   *   length target. The output contract is included because `src/ai/schemas.ts` is `.strict()`, so a
+   *   response that guesses a top-level key name fails validation outright. Composition lives in
+   *   `ContentLoader` rather than here so that the signature stays the two arguments Section 4 and
+   *   Section 8 fix, and so a second provider (Section 17) inherits it without re-deriving it.
    *
    * @throws {AIValidationError} the model's output did not match `src/ai/schemas.ts`.
    * @throws {AIRetryableError} the call failed in a way a retry may resolve (Section 8).

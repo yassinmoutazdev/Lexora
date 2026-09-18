@@ -222,8 +222,10 @@ export class WorkerLoop {
     const evaluationTarget = { contentVersion: context.contentVersion };
 
     if (context.jobType === JOB_TYPES.writingEvaluation) {
-      // The rubric instructions come from the *frozen* version's bundle, passed in rather than
-      // resolved by the provider, so the provider has no way to grade against "current" content.
+      // The prompt comes from the *frozen* version's bundle, passed in rather than resolved by the
+      // provider, so the provider has no way to grade against "current" content. It carries the
+      // rubric, the task the response was written in answer to, and the output contract — composed
+      // from that version's own two writing files by `ContentLoader.loadVersion`.
       const evaluation = await this.deps.ai.evaluateWriting(
         context.responseText,
         content.writingRubricInstructions,

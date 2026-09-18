@@ -170,6 +170,51 @@ describe('JobService.completeJob — a succeeded writing evaluation', () => {
     expect(updated.completedAt).toBeInstanceOf(Date);
   });
 
+  /**
+   * FR-WRITE-008 requires feedback to be lightweight, and the rubric authors the number as
+   * `outputRequirements.maxCorrections`. The prompt states it, but a prompt is an instruction
+   * rather than an enforcement, so an overage is trimmed here — the one place holding both the
+   * result and the submission's frozen rubric.
+   */
+  it("caps the stored corrections at the rubric's own limit", async () => {
+    const { submissionId, jobs } = await aFinalizedSubmission();
+    const cap = new ContentLoader(REAL_CONTENT).getContent('v1').writingRubric.outputRequirements
+      .maxCorrections;
+
+    const evaluation = {
+      ...defaultWritingEvaluation(),
+      corrections: Array.from({ length: cap + 3 }, (_unused, index) => ({
+        original: `wrong ${index}`,
+        corrected: `right ${index}`,
+        explanation: `reason ${index}`,
+      })),
+    };
+
+    await service().completeJob(jobOfType(jobs, JOB_TYPES.writingEvaluation).id, evaluation, V1);
+
+    const stored = await readSubmission(submissionId);
+    const { corrections } = stored.writingFeedback as { corrections: { original: string }[] };
+
+    expect(corrections).toHaveLength(cap);
+    // The model's own order survives, because the rubric asks it for the *most valuable*
+    // corrections — the earliest are the ones it judged to matter most.
+    expect(corrections.map((correction) => correction.original)).toEqual(
+      Array.from({ length: cap }, (_unused, index) => `wrong ${index}`),
+    );
+  });
+
+  it('leaves a correction list already within the cap untouched', async () => {
+    const { submissionId, jobs } = await aFinalizedSubmission();
+    const evaluation = defaultWritingEvaluation();
+
+    await service().completeJob(jobOfType(jobs, JOB_TYPES.writingEvaluation).id, evaluation, V1);
+
+    const stored = await readSubmission(submissionId);
+    const { corrections } = stored.writingFeedback as { corrections: unknown[] };
+
+    expect(corrections).toEqual(evaluation.corrections);
+  });
+
   it('computes the overall score from the frozen rubric weights', async () => {
     // FR-WRITE-006: the overall is a deterministic function of the criterion judgments and the
     // versioned weights (Section 7). The fake returns 80 for all five criteria, and the v1 rubric
