@@ -1,0 +1,153 @@
+{
+  "section": "grammar",
+  "title": "Grammar",
+  "contentStatus": "provisional",
+  "statusNote": "Production content drafted for the pilot cohort (v2), replacing the v1 development set. Item wording and difficulty labels are design intent, not calibrated against real student performance. Requires curriculum team sign-off before contentStatus is changed to \"approved\".",
+  "instructions": "Choose the option that best completes each sentence.",
+  "questions": [
+    {
+      "id": "grammar-001",
+      "skill": "verb-agreement",
+      "difficulty": "basic",
+      "type": "multiple_choice",
+      "prompt": "She ___ to the library every Saturday.",
+      "options": [
+        { "id": "a", "text": "go" },
+        { "id": "b", "text": "goes" },
+        { "id": "c", "text": "going" },
+        { "id": "d", "text": "gone" }
+      ],
+      "correctAnswer": "b",
+      "explanation": "A third-person singular subject ('she') takes the -s form of the verb in the present simple: 'she goes'. The other options either ignore the subject ('go') or are not finite verb forms ('going', 'gone').",
+      "points": 1
+    },
+    {
+      "id": "grammar-002",
+      "skill": "articles",
+      "difficulty": "basic",
+      "type": "multiple_choice",
+      "prompt": "I saw ___ elephant at the zoo yesterday.",
+      "options": [
+        { "id": "a", "text": "a" },
+        { "id": "b", "text": "an" },
+        { "id": "c", "text": "the" },
+        { "id": "d", "text": "no article" }
+      ],
+      "correctAnswer": "b",
+      "explanation": "'Elephant' begins with a vowel sound, so the indefinite article is 'an'. 'A' is used before consonant sounds, and 'the' would suggest a specific elephant already known to the listener.",
+      "points": 1
+    },
+    {
+      "id": "grammar-003",
+      "skill": "prepositions-time",
+      "difficulty": "basic",
+      "type": "multiple_choice",
+      "prompt": "The class starts ___ nine o'clock.",
+      "options": [
+        { "id": "a", "text": "in" },
+        { "id": "b", "text": "on" },
+        { "id": "c", "text": "at" },
+        { "id": "d", "text": "by" }
+      ],
+      "correctAnswer": "c",
+      "explanation": "'At' is used with clock times ('at nine o'clock'). 'In' is used with longer periods such as months or years, and 'on' with days and dates.",
+      "points": 1
+    },
+    {
+      "id": "grammar-004",
+      "skill": "perfect-aspect",
+      "difficulty": "intermediate",
+      "type": "multiple_choice",
+      "prompt": "I ___ in this city since 2019.",
+      "options": [
+        { "id": "a", "text": "live" },
+        { "id": "b", "text": "lived" },
+        { "id": "c", "text": "have lived" },
+        { "id": "d", "text": "am living" }
+      ],
+      "correctAnswer": "c",
+      "explanation": "'Since' marks a point in the past that continues to the present, which requires the present perfect: 'I have lived'. The present simple and present continuous do not mark this continuing duration, and the past simple would imply the situation has ended.",
+      "points": 1
+    },
+    {
+      "id": "grammar-005",
+      "skill": "comparison",
+      "difficulty": "intermediate",
+      "type": "multiple_choice",
+      "prompt": "This exam was ___ than the last one.",
+      "options": [
+        { "id": "a", "text": "hard" },
+        { "id": "b", "text": "harder" },
+        { "id": "c", "text": "hardest" },
+        { "id": "d", "text": "more hard" }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Short one-syllable adjectives form the comparative with -er: 'harder than'. 'Hardest' is the superlative rather than the comparative, and 'more hard' is not used because 'hard' already takes the -er ending.",
+      "points": 1
+    },
+    {
+      "id": "grammar-006",
+      "skill": "relative-clauses",
+      "difficulty": "intermediate",
+      "type": "multiple_choice",
+      "prompt": "The student ___ won the prize is my cousin.",
+      "options": [
+        { "id": "a", "text": "which" },
+        { "id": "b", "text": "who" },
+        { "id": "c", "text": "whose" },
+        { "id": "d", "text": "what" }
+      ],
+      "correctAnswer": "b",
+      "explanation": "The relative pronoun refers to a person ('the student') and is the subject of the clause, so 'who' is correct. 'Which' is used for things, 'whose' marks possession, and 'what' cannot introduce a defining relative clause like this one.",
+      "points": 1
+    },
+    {
+      "id": "grammar-007",
+      "skill": "conditionals",
+      "difficulty": "upper-intermediate",
+      "type": "multiple_choice",
+      "prompt": "If she ___ the earlier train, she would have arrived on time.",
+      "options": [
+        { "id": "a", "text": "took" },
+        { "id": "b", "text": "has taken" },
+        { "id": "c", "text": "had taken" },
+        { "id": "d", "text": "would take" }
+      ],
+      "correctAnswer": "c",
+      "explanation": "The third conditional describes an unreal past situation: 'if' plus the past perfect, then 'would have' plus the past participle. 'Would take' cannot appear in the 'if' clause here, and the present perfect does not fit a hypothetical past.",
+      "points": 1
+    },
+    {
+      "id": "grammar-008",
+      "skill": "reported-speech",
+      "difficulty": "upper-intermediate",
+      "type": "multiple_choice",
+      "prompt": "He said: 'I will have finished the report by Friday.' Report this in indirect speech: He said that he ___ finished the report by Friday.",
+      "options": [
+        { "id": "a", "text": "will have" },
+        { "id": "b", "text": "would have" },
+        { "id": "c", "text": "has" },
+        { "id": "d", "text": "had" }
+      ],
+      "correctAnswer": "b",
+      "explanation": "The original statement uses the future perfect 'will have finished'. Reported after the past reporting verb 'said', 'will' shifts back to 'would', giving 'he would have finished'. 'Will have' is the same form left unshifted, which reported speech does not allow here; 'had finished' is the backshift of a past form such as 'finished', not of 'will have finished'; and 'has' is a present tense form that cannot follow a past reporting verb in this way.",
+      "points": 1
+    },
+    {
+      "id": "grammar-009",
+      "skill": "passive-impersonal",
+      "difficulty": "upper-intermediate",
+      "type": "multiple_choice",
+      "prompt": "It ___ that the new policy will reduce costs significantly.",
+      "options": [
+        { "id": "a", "text": "is believed" },
+        { "id": "b", "text": "believes" },
+        { "id": "c", "text": "is believing" },
+        { "id": "d", "text": "has believed" }
+      ],
+      "correctAnswer": "a",
+      "explanation": "This impersonal pattern reports a general opinion without naming who holds it: 'it is believed that...' uses the passive of a reporting verb after the dummy subject 'it'. 'Believe' is a stative verb and is not normally used in the continuous form, and the active forms 'believes' and 'has believed' both need a real subject capable of holding a belief, which 'it' does not provide here.",
+      "points": 1
+    }
+  ]
+}

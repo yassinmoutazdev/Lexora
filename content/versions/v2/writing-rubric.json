@@ -1,0 +1,95 @@
+{
+  "section": "writing",
+  "contentStatus": "provisional",
+  "statusNote": "The five criteria are approved (PRD FR-WRITE-009) and unchanged in this version. The numeric weights are explicitly TBD in PRD Section 23.1 item 1 — they remain 20/20/20/20/20 here so the scoring formula has a real input, and must be replaced by the team's confirmed weights before the pilot. Do not treat 20/20/20/20/20 as an approved rubric decision. The band descriptors under `bands` remain a first proposal, unchanged in substance from the prior draft, and are the rubric's most calibration-sensitive content; they must be reviewed and confirmed by the team. This version fixes one inconsistency found on review: outputRequirements.fields.corrections now states the five-item cap so the model-facing instructions match the maxCorrections the schema enforces. One spelling inconsistency was deliberately left unchanged: the fixed criterion label uses 'organization' (American) while the rest of this content set uses British spelling. The field descriptions under outputRequirements.fields are NOT provisional placeholders: ContentLoader composes them, together with the task in writing-prompt.json, into the text the model is given, and src/ai/schemas.ts validates the response against exactly the shape they describe. They must be kept in step with that schema.",
+  "criteria": [
+    {
+      "key": "grammarAccuracy",
+      "label": "Grammar accuracy",
+      "description": "Control of grammatical structures: tense and aspect, agreement, articles, prepositions, clause construction. Consider both the frequency and the seriousness of errors."
+    },
+    {
+      "key": "vocabulary",
+      "label": "Vocabulary",
+      "description": "Range, precision, and appropriacy of word choice. Reward varied and accurate vocabulary; penalise repetition, misuse, and mother-tongue transfer that obscures meaning."
+    },
+    {
+      "key": "sentenceStructure",
+      "label": "Sentence structure",
+      "description": "Variety and correctness of sentence construction, including the use of subordinate clauses and the avoidance of run-on or fragmentary sentences."
+    },
+    {
+      "key": "coherence",
+      "label": "Coherence and organization",
+      "description": "Logical ordering of ideas, effective paragraphing, and the use of linking devices so the reader can follow the argument without effort."
+    },
+    {
+      "key": "taskCompletion",
+      "label": "Task completion",
+      "description": "Whether the response addresses the prompt, states a position where one is asked for, supports it with reasons and examples, and meets the expected length and register."
+    }
+  ],
+  "weights": {
+    "grammarAccuracy": 20,
+    "vocabulary": 20,
+    "sentenceStructure": 20,
+    "coherence": 20,
+    "taskCompletion": 20
+  },
+  "scoreRange": {
+    "min": 0,
+    "max": 100
+  },
+  "bands": {
+    "definitions": [
+      { "name": "Limited", "min": 0, "max": 39 },
+      { "name": "Developing", "min": 40, "max": 59 },
+      { "name": "Competent", "min": 60, "max": 79 },
+      { "name": "Strong", "min": 80, "max": 100 }
+    ],
+    "descriptors": {
+      "grammarAccuracy": {
+        "Limited": "Errors in basic structures — tense, agreement, articles, word order — are frequent and often obscure the meaning. Control is not yet established even in simple sentences.",
+        "Developing": "Simple structures are usually controlled. Errors in tense, agreement, and articles remain frequent and noticeable, and attempts at complex structures usually break down.",
+        "Competent": "Generally accurate in simple structures and reasonably controlled in complex ones. Errors occur but are occasional and rarely interfere with meaning.",
+        "Strong": "Accurate and varied across simple and complex structures. Any remaining errors are minor slips that do not affect meaning."
+      },
+      "vocabulary": {
+        "Limited": "A narrow range of words, heavily repeated. Frequent misuse or first-language transfer makes the meaning hard to recover.",
+        "Developing": "Enough vocabulary for basic ideas, but repetitive and often imprecise. Some word choices are inappropriate or unclear in context.",
+        "Competent": "A range wide enough to express the ideas with reasonable precision. Some repetition or imprecision, but the intended meaning is clear.",
+        "Strong": "Varied and precise, including some less common or topic-appropriate words used accurately and naturally."
+      },
+      "sentenceStructure": {
+        "Limited": "Sentences are very short and simple, or run together without clear boundaries. Fragments and run-ons are frequent.",
+        "Developing": "Mostly simple sentences, with some attempts at coordination or subordination. Run-ons and fragments still occur regularly.",
+        "Competent": "A mix of simple and complex sentences, generally well formed, with some variety in length and opening.",
+        "Strong": "Varied and controlled, including subordinate clauses used effectively where they help the argument. No run-ons or fragments."
+      },
+      "coherence": {
+        "Limited": "Ideas are not arranged in a followable order. Paragraphing is absent or unrelated to the content, and the reader must supply the connections.",
+        "Developing": "Some overall organisation is visible, but paragraphing is inconsistent and linking is limited to a few basic connectors used repeatedly.",
+        "Competent": "Clear overall organisation, with paragraphs that group related ideas. Linking devices are present and work, though some are used mechanically.",
+        "Strong": "Ideas progress logically and paragraphing is purposeful. Linking is varied and unobtrusive, so the argument is easy to follow throughout."
+      },
+      "taskCompletion": {
+        "Limited": "The response does not address the task, or is too brief to judge. No position is stated, or the writing answers a different question.",
+        "Developing": "The task is addressed and a position is identifiable, but it is left unsupported or supported only by assertion. The response falls well short of the expected length.",
+        "Competent": "The task is addressed and a clear position is held, supported by at least one reason and one example. The response is broadly the expected length.",
+        "Strong": "The task is addressed fully: the position is clear and sustained, each reason is supported by relevant examples, and the response is at the expected length and register."
+      }
+    }
+  },
+  "instructions": "You are evaluating a single piece of English free writing produced by a university student who is a learner of English. Assess the response against exactly the five criteria listed below, and against nothing else.\n\nScore each criterion on a 0-100 scale, where 0 means the criterion is entirely unmet and 100 means it is handled with complete competence for this level. Do not compute an overall score: the overall score is calculated separately by the application from your criterion scores. Do not average the criteria yourself.\n\nFor each criterion, give the numeric score and a short rationale that cites specific evidence from the response. Base every judgement only on the text you are given. Do not speculate about the student's identity, background, or ability beyond what this one response shows.\n\nCriteria:\n1. grammarAccuracy — Control of grammatical structures: tense and aspect, agreement, articles, prepositions, clause construction.\n2. vocabulary — Range, precision, and appropriacy of word choice.\n3. sentenceStructure — Variety and correctness of sentence construction.\n4. coherence — Logical ordering of ideas, paragraphing, and linking devices.\n5. taskCompletion — Whether the response addresses the prompt and supports its position with reasons and examples.\n\nReturn your assessment as a single JSON object and nothing else — no prose before or after it, and no markdown code fences.",
+  "outputRequirements": {
+    "criterionRationaleRequired": true,
+    "maxCorrections": 5,
+    "fields": {
+      "criteriaScores": "One entry per criterion key, each an object with exactly two fields: \"score\" (the numeric score) and \"rationale\" (a short rationale citing specific evidence from the response). No other fields.",
+      "strengths": "An array of short strings: what the response does well.",
+      "weaknesses": "An array of short strings: the most important weaknesses.",
+      "corrections": "The most valuable corrections (no more than five), each an object with exactly three fields: \"original\" (the wording as the student wrote it, quoted exactly), \"corrected\" (the wording as it should be), and \"explanation\" (a brief explanation). No other fields.",
+      "suggestions": "An array of short strings: practical suggestions for improvement."
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "section": "writing",
+  "title": "Writing",
+  "contentStatus": "provisional",
+  "statusNote": "Production draft for the pilot cohort (v2). The task, genre, and guidance are a considered proposal, judged answerable by students from basic level upward: a basic student can state a preference with a single example, and a strong one can weigh depth against breadth and qualify a position. Requires curriculum team sign-off before contentStatus is changed to \"approved\".",
+  "instructions": "Write your answer in English. There is no time limit, and you may plan your ideas before you begin.",
+  "task": {
+    "id": "writing-task-1",
+    "genre": "opinion essay",
+    "prompt": "Some people believe university courses should focus only on subjects directly related to a student's future job. Others believe students should also study a wider range of subjects. Write an essay giving your opinion on this question. Support your view with reasons and examples from your own experience.",
+    "guidance": "Write in clear paragraphs. State your position, give reasons for it, and support each reason with an example. Aim for a well-organised answer of roughly 200 to 250 words; there is no penalty for writing more or less than this."
+  }
+}

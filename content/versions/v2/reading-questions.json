@@ -1,0 +1,165 @@
+{
+  "section": "reading",
+  "title": "Reading",
+  "contentStatus": "provisional",
+  "statusNote": "Production content drafted for the pilot cohort (v2), replacing the v1 development set. Passage 2 is new for v2 and is argumentative in kind, where v1's second passage was informational in the same way as the first, so the two passages now exercise different reading skills. Difficulty labels are design intent, not calibrated. Requires curriculum team sign-off before contentStatus is changed to \"approved\".",
+  "instructions": "Read each passage, then answer the questions that follow it.",
+  "passages": [
+    {
+      "id": "reading-passage-1",
+      "title": "Why Sleep Matters for Learning",
+      "text": "For decades, students have been advised to study late into the night before an examination. Recent research on memory suggests that this advice may be counterproductive. During deep sleep, the brain replays patterns of activity recorded during the day, strengthening the connections that hold new information. A student who studies until three in the morning and then sleeps for three hours gives that process very little time to work. In one experiment, participants who slept for eight hours after learning a list of word pairs remembered substantially more of it a week later than those who had stayed awake. The researchers concluded that sleep is not simply a period of rest, but an active part of learning itself. For students, the practical implication is straightforward: a regular sleep schedule may matter as much as the hours spent at a desk.",
+      "questions": [
+        {
+          "id": "reading-p1-001",
+          "skill": "detail-recall",
+          "difficulty": "basic",
+          "type": "multiple_choice",
+          "prompt": "According to the passage, what happens during deep sleep?",
+          "options": [
+            { "id": "a", "text": "The brain rests completely and stops processing." },
+            { "id": "b", "text": "The brain replays patterns of activity recorded during the day." },
+            { "id": "c", "text": "The brain removes unimportant information." },
+            { "id": "d", "text": "The brain produces new word pairs." }
+          ],
+          "correctAnswer": "b",
+          "explanation": "The passage states directly that 'during deep sleep, the brain replays patterns of activity recorded during the day'. The passage's conclusion that sleep is 'an active part of learning' rules out the idea that the brain simply rests and stops processing.",
+          "points": 1
+        },
+        {
+          "id": "reading-p1-002",
+          "skill": "detail-recall",
+          "difficulty": "basic",
+          "type": "multiple_choice",
+          "prompt": "How long did the participants in the experiment sleep before their memory was tested a week later?",
+          "options": [
+            { "id": "a", "text": "Three hours" },
+            { "id": "b", "text": "Eight hours" },
+            { "id": "c", "text": "One week" },
+            { "id": "d", "text": "Three in the morning" }
+          ],
+          "correctAnswer": "b",
+          "explanation": "The passage says 'participants who slept for eight hours after learning a list of word pairs remembered substantially more of it a week later'. The other options refer to different numbers mentioned elsewhere in the passage, not the amount of sleep in the experiment.",
+          "points": 1
+        },
+        {
+          "id": "reading-p1-003",
+          "skill": "inference-evidence",
+          "difficulty": "intermediate",
+          "type": "multiple_choice",
+          "prompt": "What does the experiment described in the passage suggest?",
+          "options": [
+            { "id": "a", "text": "Sleeping eight hours guarantees better examination results." },
+            { "id": "b", "text": "Staying awake helps people memorize word pairs." },
+            { "id": "c", "text": "Sleep after learning improves how much is remembered later." },
+            { "id": "d", "text": "Word pairs are unusually difficult to learn." }
+          ],
+          "correctAnswer": "c",
+          "explanation": "The experiment compared two groups and found that the group who slept remembered more a week later, which supports a link between sleep and retention. The passage does not claim that sleeping eight hours guarantees better examination results, only that it improved recall in this experiment.",
+          "points": 1
+        },
+        {
+          "id": "reading-p1-004",
+          "skill": "vocabulary-in-context",
+          "difficulty": "intermediate",
+          "type": "multiple_choice",
+          "prompt": "In the passage, the word 'counterproductive' is closest in meaning to:",
+          "options": [
+            { "id": "a", "text": "producing the opposite of the desired result" },
+            { "id": "b", "text": "requiring far more effort than expected" },
+            { "id": "c", "text": "difficult to measure accurately" },
+            { "id": "d", "text": "widely accepted by researchers" }
+          ],
+          "correctAnswer": "a",
+          "explanation": "'Counterproductive' means having the opposite of the intended effect. The passage uses it to say that studying late may work against the student rather than for them.",
+          "points": 1
+        },
+        {
+          "id": "reading-p1-005",
+          "skill": "authors-purpose",
+          "difficulty": "upper-intermediate",
+          "type": "multiple_choice",
+          "prompt": "What is the main purpose of the passage?",
+          "options": [
+            { "id": "a", "text": "To criticise students who study late at night." },
+            { "id": "b", "text": "To present a research finding and draw a practical implication from it." },
+            { "id": "c", "text": "To compare two competing theories of memory formation." },
+            { "id": "d", "text": "To argue that examinations should be scheduled later in the day." }
+          ],
+          "correctAnswer": "b",
+          "explanation": "The passage reports research on sleep and memory, then closes with the practical implication for students. It does not compare competing theories, and its tone is explanatory rather than critical.",
+          "points": 1
+        }
+      ]
+    },
+    {
+      "id": "reading-passage-2",
+      "title": "The Case for a Shorter Working Week",
+      "text": "Across a number of countries, companies have begun experimenting with a four-day working week, giving employees an extra day off without cutting their pay. Critics warn that fewer hours must mean less output, and that customers used to five days of service will simply go elsewhere. This concern, however, rests on a questionable assumption: that output rises in direct proportion to the number of hours worked. In practice, long hours often produce diminishing returns, as tired employees make more mistakes and need longer to recover between shifts. Several of the companies that have trialled the shorter week report that productivity per hour actually increased, even as total hours fell. There are, admittedly, industries where a four-day week is harder to arrange, particularly those that depend on being open every day of the week. Yet for many office-based businesses, the evidence so far suggests that a shorter week need not come at the expense of output, and may even improve staff retention. The idea deserves a wider trial before it is dismissed.",
+      "questions": [
+        {
+          "id": "reading-p2-001",
+          "skill": "detail-recall",
+          "difficulty": "basic",
+          "type": "true_false",
+          "prompt": "According to the passage, some companies that tried a four-day week reported that their productivity per hour increased.",
+          "options": [
+            { "id": "a", "text": "True" },
+            { "id": "b", "text": "False" }
+          ],
+          "correctAnswer": "a",
+          "explanation": "The passage states that 'several of the companies that have trialled the shorter week report that productivity per hour actually increased, even as total hours fell'.",
+          "points": 1
+        },
+        {
+          "id": "reading-p2-002",
+          "skill": "vocabulary-in-context",
+          "difficulty": "intermediate",
+          "type": "multiple_choice",
+          "prompt": "In the passage, 'diminishing returns' is closest in meaning to:",
+          "options": [
+            { "id": "a", "text": "profits that keep growing without limit" },
+            { "id": "b", "text": "less extra benefit for each additional unit of effort" },
+            { "id": "c", "text": "a sudden and total loss of income" },
+            { "id": "d", "text": "money that must be paid back to a customer" }
+          ],
+          "correctAnswer": "b",
+          "explanation": "'Diminishing returns' describes a situation where each additional hour of work produces a smaller benefit than the hour before it, which is why the passage links long hours to tiredness and mistakes rather than to steadily higher output.",
+          "points": 1
+        },
+        {
+          "id": "reading-p2-003",
+          "skill": "argument-structure",
+          "difficulty": "upper-intermediate",
+          "type": "multiple_choice",
+          "prompt": "How does the author respond to the concern that fewer working hours must mean less output?",
+          "options": [
+            { "id": "a", "text": "By presenting evidence that hourly productivity rose in several companies that shortened their working week." },
+            { "id": "b", "text": "By arguing that customer satisfaction matters more than output." },
+            { "id": "c", "text": "By agreeing that the concern is correct for every kind of business." },
+            { "id": "d", "text": "By suggesting that employee pay should be reduced to compensate." }
+          ],
+          "correctAnswer": "a",
+          "explanation": "The author names the concern about output directly, then answers it with the report that 'productivity per hour actually increased' at several companies, using this as evidence against the assumption that fewer hours must mean less output.",
+          "points": 1
+        },
+        {
+          "id": "reading-p2-004",
+          "skill": "authors-stance",
+          "difficulty": "upper-intermediate",
+          "type": "multiple_choice",
+          "prompt": "Which best describes the author's overall position on the four-day working week, as expressed in the passage?",
+          "options": [
+            { "id": "a", "text": "It should be adopted immediately by every company." },
+            { "id": "b", "text": "It is impossible for most businesses to introduce." },
+            { "id": "c", "text": "It shows promise and deserves a wider trial, though it will not suit every business." },
+            { "id": "d", "text": "It has already been proven to increase pay for all workers." }
+          ],
+          "correctAnswer": "c",
+          "explanation": "The passage closes by saying the evidence 'suggests that a shorter week need not come at the expense of output' while also admitting that some industries find it 'harder to arrange', and ends by saying the idea 'deserves a wider trial' rather than claiming it is already proven or universal.",
+          "points": 1
+        }
+      ]
+    }
+  ]
+}

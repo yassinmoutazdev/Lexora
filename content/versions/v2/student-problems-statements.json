@@ -1,0 +1,53 @@
+{
+  "section": "studentProblems",
+  "title": "Student Problems",
+  "contentStatus": "provisional",
+  "statusNote": "The five-point agreement scale and the seven areas are structurally unchanged from v1 (PRD FR-PROB-002). The 20 statements are new production content for v2, and fix two defects in v1: a reverse-polarity item and a double-barrelled item were both rewritten. All statements are worded so that agreement indicates greater difficulty; there is no reverse-scored item in this set. The statements are English-only; whether they (and the open-text prompt/notice) should also be offered in Arabic is an open decision. Requires curriculum team sign-off before contentStatus is changed to \"approved\".",
+  "instructions": "The statements below describe some common difficulties students meet when learning English. For each statement, choose the response that best describes your own experience. There are no right or wrong answers, and your responses do not affect your English score.",
+  "scale": [
+    { "value": 1, "label": "Strongly disagree" },
+    { "value": 2, "label": "Disagree" },
+    { "value": 3, "label": "Neutral" },
+    { "value": 4, "label": "Agree" },
+    { "value": 5, "label": "Strongly agree" }
+  ],
+  "areas": [
+    { "id": "speaking_confidence", "label": "Speaking and confidence" },
+    { "id": "listening", "label": "Listening" },
+    { "id": "vocabulary", "label": "Vocabulary" },
+    { "id": "grammar", "label": "Grammar" },
+    { "id": "reading", "label": "Reading" },
+    { "id": "writing", "label": "Writing" },
+    { "id": "learning_habits", "label": "Learning habits and exposure" }
+  ],
+  "statements": [
+    { "id": "sp-01", "area": "speaking_confidence", "text": "I find it difficult to speak confidently in English around other people." },
+    { "id": "sp-02", "area": "speaking_confidence", "text": "I hesitate to speak English because I am afraid of making mistakes." },
+    { "id": "sp-03", "area": "speaking_confidence", "text": "I find it difficult to speak English without preparing what I will say first." },
+    { "id": "sp-04", "area": "listening", "text": "I find it difficult to follow spoken English in films, videos, or everyday conversation." },
+    { "id": "sp-05", "area": "listening", "text": "I find it difficult to understand English when people speak quickly." },
+    { "id": "sp-06", "area": "listening", "text": "I find it difficult to understand English speakers who have an accent different from what I am used to." },
+    { "id": "sp-07", "area": "vocabulary", "text": "I often cannot find the right English word while I am speaking." },
+    { "id": "sp-08", "area": "vocabulary", "text": "I forget English words that I have studied before." },
+    { "id": "sp-09", "area": "vocabulary", "text": "I understand more English words than I am able to use myself." },
+    { "id": "sp-10", "area": "grammar", "text": "I find it difficult to apply English grammar rules when I write." },
+    { "id": "sp-11", "area": "grammar", "text": "I make grammar mistakes when I speak, even when I know the rule." },
+    { "id": "sp-12", "area": "grammar", "text": "I translate from Arabic into English in my head before I form a sentence." },
+    { "id": "sp-13", "area": "reading", "text": "I find academic English texts difficult to understand." },
+    { "id": "sp-14", "area": "reading", "text": "I often stop at words I do not know when I am reading in English." },
+    { "id": "sp-15", "area": "reading", "text": "I need to read an English sentence more than once to understand it." },
+    { "id": "sp-16", "area": "writing", "text": "I find it difficult to organise my ideas when I write in English." },
+    { "id": "sp-17", "area": "writing", "text": "I find it difficult to notice my own mistakes when I check my writing." },
+    { "id": "sp-18", "area": "learning_habits", "text": "I have few opportunities to practise English outside class." },
+    { "id": "sp-19", "area": "learning_habits", "text": "I rarely read English outside my coursework." },
+    { "id": "sp-20", "area": "learning_habits", "text": "I rarely listen to English outside my coursework." }
+  ],
+  "openTextQuestion": {
+    "id": "student-problems-open-text",
+    "prompt": "Is there anything else that makes learning English difficult for you? Please describe it in your own words. You may write in English or in Arabic.",
+    "required": false,
+    "languages": ["en", "ar"],
+    "privacyNotice": "Please do not include other people's names, phone numbers, passwords, or similar private details in your answer.",
+    "privacyNoticeHeading": "Before you answer"
+  }
+}

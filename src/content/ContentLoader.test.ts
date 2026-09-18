@@ -50,9 +50,35 @@ afterAll(() => {
 describe('ContentLoader against the committed content', () => {
   const loader = new ContentLoader();
 
+  /**
+   * The pointer and the version directories are read from disk here rather than written out as
+   * literals. Which version is current is a content decision that changes every time the content
+   * does, and this test is about the loader honouring `current-version.json` — not about which
+   * version that file happens to name. Spelling the version out made the first content change
+   * fail a test about the loader, which reads as a loader bug and is not one.
+   */
   it('loads the current version named by current-version.json', () => {
-    expect(loader.getCurrentVersion()).toBe('v1');
-    expect(loader.getLoadedVersions()).toEqual(['v1']);
+    const pointer = JSON.parse(
+      fs.readFileSync(path.join(REAL_CONTENT, 'current-version.json'), 'utf8'),
+    ) as { version: string };
+
+    const versionDirs = fs
+      .readdirSync(path.join(REAL_CONTENT, 'versions'), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+
+    expect(loader.getCurrentVersion()).toBe(pointer.version);
+    expect(loader.getLoadedVersions().sort()).toEqual(versionDirs);
+  });
+
+  /**
+   * Whatever becomes current, v1 stays resident: a submission created under it has its version
+   * frozen at draft creation and must still resolve once a newer version ships (Section 12).
+   */
+  it('keeps the frozen version of an already-recorded submission resolvable', () => {
+    expect(loader.getLoadedVersions()).toContain('v1');
+    expect(loader.getContent('v1').grammar.questions.length).toBeGreaterThan(0);
   });
 
   it('exposes each section of the bundle', () => {
@@ -145,34 +171,50 @@ describe('ContentLoader against the committed content', () => {
 });
 
 describe('ContentLoader with a fixture version added', () => {
-  it('resolves v1 identically after a v2 exists', () => {
+  it('resolves v1 identically after a new version exists', () => {
     const root = makeFixtureTree();
+
+    // The fixture states its own current version instead of inheriting the repository's. The
+    // question here is what the loader does when a version is *added*, and inheriting made the
+    // answer depend on what the committed content happens to ship as current.
+    writeJson(path.join(root, 'current-version.json'), { version: 'v1' });
+
     const v1Before = new ContentLoader(root).getContent('v1');
 
-    addVersion(root, 'v2');
-    // v2 differs, so a loader that resolved "current" or "latest" would visibly return the wrong
-    // bundle rather than accidentally matching v1.
-    const v2File = path.join(root, 'versions', 'v2', 'grammar-questions.json');
-    const v2 = readJson(v2File);
-    v2.questions[0].prompt = 'A v2-only question.';
-    writeJson(v2File, v2);
+    // A directory name no committed version can collide with, so the fixture's added version is
+    // genuinely added rather than overwriting one the repository already ships.
+    const addedDir = addVersion(root, 'v-added');
+    // v-added differs, so a loader that resolved "current" or "latest" would visibly return the
+    // wrong bundle rather than accidentally matching v1.
+    const addedFile = path.join(addedDir, 'grammar-questions.json');
+    const added = readJson(addedFile);
+    added.questions[0].prompt = 'A v-added-only question.';
+    writeJson(addedFile, added);
 
     const loader = new ContentLoader(root);
 
-    expect(loader.getLoadedVersions().sort()).toEqual(['v1', 'v2']);
+    const versionDirs = fs
+      .readdirSync(path.join(root, 'versions'), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+
+    expect(loader.getLoadedVersions().sort()).toEqual(versionDirs);
+    expect(loader.getLoadedVersions()).toContain('v-added');
     expect(loader.getCurrentVersion()).toBe('v1');
     expect(loader.getContent('v1')).toEqual(v1Before);
-    expect(loader.getContent('v2').grammar.questions[0]?.prompt).toBe('A v2-only question.');
+    // The added version is served as itself, not as a fallback to the current one.
+    expect(loader.getContent('v-added').grammar.questions[0]?.prompt).toBe('A v-added-only question.');
   });
 
   it('serves the new current version once current-version.json points at it', () => {
     const root = makeFixtureTree();
-    addVersion(root, 'v2');
-    writeJson(path.join(root, 'current-version.json'), { version: 'v2' });
+    addVersion(root, 'v-added');
+    writeJson(path.join(root, 'current-version.json'), { version: 'v-added' });
 
     const loader = new ContentLoader(root);
 
-    expect(loader.getCurrentVersion()).toBe('v2');
+    expect(loader.getCurrentVersion()).toBe('v-added');
     // v1 remains resolvable — a submission frozen under it must still score.
     expect(loader.getContent('v1').grammar.questions.length).toBeGreaterThan(0);
   });

@@ -1,0 +1,153 @@
+{
+  "section": "vocabulary",
+  "title": "Vocabulary",
+  "contentStatus": "provisional",
+  "statusNote": "Production content drafted for the pilot cohort (v2), replacing the v1 development set. Item wording and difficulty labels are design intent, not calibrated against real student performance. Requires curriculum team sign-off before contentStatus is changed to \"approved\".",
+  "instructions": "Choose the option that fits each sentence best.",
+  "questions": [
+    {
+      "id": "vocabulary-001",
+      "skill": "collocation-verb-noun",
+      "difficulty": "basic",
+      "type": "multiple_choice",
+      "prompt": "Could you ___ a photo of us before we leave?",
+      "options": [
+        { "id": "a", "text": "do" },
+        { "id": "b", "text": "make" },
+        { "id": "c", "text": "take" },
+        { "id": "d", "text": "give" }
+      ],
+      "correctAnswer": "c",
+      "explanation": "'Take a photo' is the standard collocation in English. 'Make a photo' is a common transfer error from languages that use their equivalent of 'make' with photographs, and 'do' and 'give' do not collocate with 'photo' in this sense.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-002",
+      "skill": "context-word-choice",
+      "difficulty": "basic",
+      "type": "multiple_choice",
+      "prompt": "The company's profits have been ___ for the last three years; sales keep going up.",
+      "options": [
+        { "id": "a", "text": "declining" },
+        { "id": "b", "text": "fluctuating" },
+        { "id": "c", "text": "rising" },
+        { "id": "d", "text": "stagnant" }
+      ],
+      "correctAnswer": "c",
+      "explanation": "'Rising' means increasing, which matches profits that 'keep going up'. 'Declining' means decreasing, the opposite meaning; 'fluctuating' means moving up and down rather than steadily up; and 'stagnant' means not changing at all.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-003",
+      "skill": "occupational-vocabulary",
+      "difficulty": "basic",
+      "type": "multiple_choice",
+      "prompt": "He is a ___. He prepares meals in a restaurant.",
+      "options": [
+        { "id": "a", "text": "driver" },
+        { "id": "b", "text": "chef" },
+        { "id": "c", "text": "nurse" },
+        { "id": "d", "text": "farmer" }
+      ],
+      "correctAnswer": "b",
+      "explanation": "A 'chef' is a professional cook who prepares meals in a restaurant. The other options name unrelated occupations.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-004",
+      "skill": "collocation-verb-noun",
+      "difficulty": "intermediate",
+      "type": "multiple_choice",
+      "prompt": "The company plans to ___ a new product next spring.",
+      "options": [
+        { "id": "a", "text": "launch" },
+        { "id": "b", "text": "throw" },
+        { "id": "c", "text": "spread" },
+        { "id": "d", "text": "rise" }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Companies 'launch' a product when they release it to the market. 'Throw' and 'spread' can take an object but do not collocate with 'product' in this sense, and 'rise' cannot take an object at all.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-005",
+      "skill": "word-formation",
+      "difficulty": "intermediate",
+      "type": "multiple_choice",
+      "prompt": "She made a valuable ___ to the discussion.",
+      "options": [
+        { "id": "a", "text": "contribution" },
+        { "id": "b", "text": "contributive" },
+        { "id": "c", "text": "contributing" },
+        { "id": "d", "text": "contributively" }
+      ],
+      "correctAnswer": "a",
+      "explanation": "After 'a valuable', the gap needs a noun, and 'contribution' is the noun form of 'contribute'. 'Contributive' and 'contributively' are not standard English words in this form, and 'contributing' cannot follow an article and adjective this way.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-006",
+      "skill": "phrasal-verbs",
+      "difficulty": "intermediate",
+      "type": "multiple_choice",
+      "prompt": "The meeting was ___ until next Monday because the manager was ill.",
+      "options": [
+        { "id": "a", "text": "put off" },
+        { "id": "b", "text": "put up" },
+        { "id": "c", "text": "put on" },
+        { "id": "d", "text": "put out" }
+      ],
+      "correctAnswer": "a",
+      "explanation": "'Put off' means to postpone to a later time, which is what happened to the meeting. 'Put on' means to arrange or wear, 'put up' means to accommodate or raise, and 'put out' means to extinguish.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-007",
+      "skill": "precise-word-choice",
+      "difficulty": "upper-intermediate",
+      "type": "multiple_choice",
+      "prompt": "The evidence was ___; the jury had no doubt about the verdict.",
+      "options": [
+        { "id": "a", "text": "inclusive" },
+        { "id": "b", "text": "conclusive" },
+        { "id": "c", "text": "exclusive" },
+        { "id": "d", "text": "elusive" }
+      ],
+      "correctAnswer": "b",
+      "explanation": "'Conclusive' means decisive and settling a question, which matches a jury left with no doubt. The other options look similar but mean unrelated things — 'elusive' in particular means difficult to find or pin down, close to the opposite of decisive.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-008",
+      "skill": "idiomatic-expression",
+      "difficulty": "upper-intermediate",
+      "type": "multiple_choice",
+      "prompt": "She has a real ___ for languages; she learned Portuguese in six months.",
+      "options": [
+        { "id": "a", "text": "flair" },
+        { "id": "b", "text": "flare" },
+        { "id": "c", "text": "flavour" },
+        { "id": "d", "text": "flat" }
+      ],
+      "correctAnswer": "a",
+      "explanation": "'A flair for something' means a natural talent for it. 'Flare' is a sudden burst of light or anger and is a common spelling confusion with 'flair'.",
+      "points": 1
+    },
+    {
+      "id": "vocabulary-009",
+      "skill": "word-formation",
+      "difficulty": "upper-intermediate",
+      "type": "multiple_choice",
+      "prompt": "The results were ___ consistent across all three groups.",
+      "options": [
+        { "id": "a", "text": "remarkable" },
+        { "id": "b", "text": "remarkably" },
+        { "id": "c", "text": "remarked" },
+        { "id": "d", "text": "remarking" }
+      ],
+      "correctAnswer": "b",
+      "explanation": "The gap modifies the adjective 'consistent', so an adverb is required: 'remarkably consistent'. The adjective 'remarkable' would have to modify a noun instead.",
+      "points": 1
+    }
+  ]
+}
