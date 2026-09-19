@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DashboardPayload } from '../../../../src/domain/staff/DashboardService';
 import { ApiError, getStaffDashboard } from '../../api/client';
+import { SkeletonCard, SkeletonStatus } from '../../components/Skeleton';
 import { StaffLayout } from '../../components/StaffLayout';
 import { Link, navigate, submissionDetailPath } from '../../router';
 
@@ -66,27 +67,37 @@ export function SubmissionsPage() {
     };
   }, []);
 
+  // Both shell states render inside `StaffLayout`, for the reason `DashboardPage` records: a staff
+  // page that drops its own navigation while loading, or because loading failed, has taken away the
+  // only way out at the moment the reader most needs it.
   if (loadError !== null && dashboard === null) {
     return (
-      <main className="page">
+      <StaffLayout activeItem="submissions" title="Submissions">
         <div className="card">
-          <h1>We could not load the submissions</h1>
+          <h2>We could not load the submissions</h2>
           <div className="notice" role="alert">
             <p>{loadError}</p>
           </div>
-          <p className="hint">Reload this page to try again.</p>
+          <p className="hint">
+            Your session is still active, and nothing has been lost. Reloading usually fixes this.
+          </p>
+          <div className="button-row">
+            <button type="button" onClick={() => window.location.reload()}>
+              Reload
+            </button>
+          </div>
         </div>
-      </main>
+      </StaffLayout>
     );
   }
 
   if (dashboard === null) {
     return (
-      <main className="page">
-        <div className="card">
-          <p className="lede">Loading submissions…</p>
-        </div>
-      </main>
+      <StaffLayout activeItem="submissions" title="Submissions">
+        <SkeletonStatus label="Loading submissions" />
+        <SkeletonCard lines={1} />
+        <SkeletonCard lines={3} />
+      </StaffLayout>
     );
   }
 
@@ -116,8 +127,24 @@ export function SubmissionsBody({ dashboard }: { dashboard: DashboardPayload }) 
           never shown to students. Opening one is recorded in the server log (Section 13).
         </p>
 
+        {/*
+          An empty list says what it means and what to do next, rather than only that it is empty.
+
+          "No submissions yet." is true and unhelpful: a staff member seeing it on the pilot's first
+          morning cannot tell whether the cohort has not started, whether something is broken, or
+          whether this page reads a different set of records than the one they expect. The sentence
+          below says which — records appear on entry, not on submission — and the link gives the
+          reader somewhere to go that is not "reload and hope".
+        */}
         {recentSubmissions.length === 0 ? (
-          <p className="muted">No submissions yet.</p>
+          <div className="empty-state">
+            <p className="empty-state-lead">No submissions yet.</p>
+            <p className="hint">
+              Students appear here as soon as they enter their details on the entry page — a record
+              does not have to be submitted to be listed.
+            </p>
+            <Link to="/staff/dashboard">Go to the dashboard</Link>
+          </div>
         ) : (
           /*
             The card is the `<Link>` itself — one focusable, keyboard-operable target that can be

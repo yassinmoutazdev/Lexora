@@ -42,11 +42,37 @@
 
   --radius-sm: 6px;
   --radius-md: 10px;
-  --radius-lg: 14px;
   --radius-pill: 999px;
   --gap: 1rem;
 
   --shadow-raised: 0 1px 2px rgba(15, 23, 32, 0.04), 0 4px 14px rgba(15, 23, 32, 0.06);
+
+  /*
+    Motion. Three durations, one easing, and no fourth of either.
+
+    These are not a scale to reach into for variety — the system had four transitions before this
+    and they already used two of these values by hand. Naming them is what lets the reduced-motion
+    block at the end of this file collapse every one of them in a single declaration, instead of
+    each animated rule having to remember to opt in.
+  */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 300ms;
+
+  /*
+    Two easings, and the difference between them is the whole point.
+
+    `--ease-standard` is for motion that should read as the interface responding — a hover, a focus
+    ring, content arriving. It is meant to be *felt* rather than watched, and noticing it usually
+    means it is too slow.
+
+    `--ease-emphasis` overshoots slightly on the way in. It is for the three moments that are
+    acknowledgements rather than responses: a section being finished, a save being accepted, writing
+    feedback arriving. Those are the times the interface is telling the reader something they did,
+    and a confirmation nobody notices has not confirmed anything.
+  */
+  --ease-standard: ease;
+  --ease-emphasis: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   --font-ui: 'Public Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
@@ -136,6 +162,28 @@ body {
   outline-offset: 2px;
 }
 
+/*
+  The programmatic focus targets, which must not show a ring.
+
+  Two places move focus deliberately, and neither is a control: `useRouteAnnouncement` focuses the
+  arriving route's heading (or its `<main>`) so a screen reader reads the new page, and the
+  assessment focuses the section heading when the student switches sections. Those elements cannot
+  be activated and have no focus behaviour of their own, so a ring around one would say "this is
+  interactive" about the one thing on screen that is not, and would appear on every navigation.
+
+  Written out rather than expressed as `[tabindex='-1']:focus`, because that selector would also
+  silence a genuine control a page had deliberately taken out of the tab order — a roving-tabindex
+  list, say — and a focus ring is the last thing that should be suppressible by accident.
+*/
+main h1[tabindex='-1']:focus,
+main h1[tabindex='-1']:focus-visible,
+main h2[tabindex='-1']:focus,
+main h2[tabindex='-1']:focus-visible,
+main[tabindex='-1']:focus,
+main[tabindex='-1']:focus-visible {
+  outline: none;
+}
+
 a {
   color: var(--accent);
 }
@@ -175,12 +223,14 @@ a {
   margin-top: var(--gap);
 }
 
-/* The one sanctioned "look here first" surface per screen (overall result, current question). */
-.card--emphasis {
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-raised);
-  padding: 1.75rem;
-}
+/*
+  Removed: `.card--emphasis`.
+
+  It was defined as "the one sanctioned 'look here first' surface per screen" and then never
+  rendered — no component ever carried the class. The role it described is now filled by `.kpi-card
+  --attention` on the dashboard, which has a caller that decides when a number is bad news. A second
+  emphasis treatment with no user would be a style waiting to be applied by mistake.
+*/
 
 h1 {
   font-family: var(--font-head);
@@ -284,9 +334,70 @@ h3 {
 
 .staff-sidebar-footer {
   margin-top: auto;
-  padding: 0.7rem;
+}
+
+.staff-footer-note {
+  margin: 0.6rem 0 0;
+  padding: 0 0.7rem;
   color: var(--ink-faint);
   font-size: 0.8rem;
+}
+
+/*
+  The sign-out control (see `SignOut` in StaffLayout.tsx).
+
+  Shaped as a navigation row rather than as a button, because that is what it is: a third thing you
+  can do in the sidebar. The generic `button` rule gives every button an accent fill, and a solid
+  blue rectangle at the bottom of the sidebar would read as the page's primary action — it is
+  neither primary nor an action on the content. It still *is* a `<button>`, not a link, because it
+  changes state rather than navigating somewhere.
+
+  `cursor: progress` while signing out, because the work is a round trip and the label alone does
+  not say the control is unavailable rather than merely waiting.
+*/
+.staff-account {
+  margin-bottom: 0.2rem;
+}
+
+.staff-signout {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 500;
+  text-align: start;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+
+.staff-signout svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+}
+
+.staff-signout:hover:not(:disabled) {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.staff-signout:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.staff-signout-error {
+  margin: 0.5rem 0.7rem 0;
+  color: var(--danger);
+  font-size: 0.82rem;
+  font-weight: 600;
 }
 
 .staff-main {
@@ -389,7 +500,9 @@ h3 {
   background: var(--page);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  transition: border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard);
 }
 
 .field input:focus,
@@ -426,7 +539,7 @@ button {
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 120ms ease;
+  transition: background var(--motion-fast) var(--ease-standard);
 }
 
 button:hover:not(:disabled) {
@@ -525,9 +638,46 @@ button.secondary:hover:not(:disabled) {
   border-color: var(--accent);
 }
 
+/*
+  The finished-section marker.
+
+  This rule has existed since the design system was written and nothing ever rendered it — the class
+  had no markup behind it, so the assessment's navigation could not say which sections were done even
+  though `assessCompleteness` had already worked it out. The markup is what was missing, not the
+  style.
+
+  The animation is the tick arriving, which is a state change worth noticing — it fires once, when a
+  student answers the last question of a section, and it is the only acknowledgement they get that a
+  section is now finished. It lasts one duration token and is collapsed to nothing by the
+  reduced-motion block at the end of this file, along with everything else.
+*/
+@keyframes tick-in {
+  from {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 .section-nav .tick {
+  display: inline-block;
+  margin-inline-start: 0.35rem;
   color: var(--success);
   font-weight: 700;
+  /*
+    300ms with an overshoot, not the 120ms it was written at.
+
+    At 120ms the tick was over before it registered — the same duration as a hover response, spent
+    on the one moment in the assessment that is an acknowledgement: a student has just answered the
+    last question of a section and this is the only thing that tells them so. An acknowledgement
+    nobody sees has not acknowledged anything. The overshoot gives it a small pop, which is what
+    makes it read as an event rather than as a character that was always there.
+  */
+  animation: tick-in var(--motion-slow) var(--ease-emphasis);
 }
 
 .section-nav button[aria-current='true'] .tick {
@@ -549,7 +699,16 @@ button.secondary:hover:not(:disabled) {
 }
 
 .summary-item {
-  background: var(--card);
+  /*
+    `--surface-sunken`, not the `var(--card)` this used to name.
+
+    There has never been a `--card` token — the declaration was invalid and the property fell back
+    to its initial value, so these tiles rendered transparent. Against a white card in light mode
+    that is invisible and looked like a decision; in dark mode it loses the intended tile surface
+    entirely. `--surface-sunken` is the token for a recessed area inside a card, and is what the
+    chart and bar tracks already use for the same job.
+  */
+  background: var(--surface-sunken);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-md);
   padding: 0.9rem 0.6rem;
@@ -569,7 +728,9 @@ button.secondary:hover:not(:disabled) {
   margin-top: 0.15rem;
 }
 
-@media (max-width: 480px) {
+/* 30rem, not the 480px this used to say: both are the same width, and the file's other three
+   breakpoints are in rem — two spellings of one measurement is two places to change it. */
+@media (max-width: 30rem) {
   .summary-strip {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -788,6 +949,10 @@ details.detail-panel .question-list {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  /* The wording swaps between states, so this only carries the colour: greying into "Saving…",
+     greening into "Saved", reddening into a failure. The `min-height` above is what stops any of it
+     moving the page. */
+  transition: color var(--motion-base) var(--ease-standard);
 }
 
 .save-status--error {
@@ -799,6 +964,22 @@ details.detail-panel .question-list {
   content: '●';
   font-size: 0.55rem;
   color: var(--success);
+  /* The dot arrives rather than simply being there — it is the "accepted" half of the pair, and the
+     word beside it cannot animate because it is different text. */
+  display: inline-block;
+  animation: save-confirm var(--motion-base) var(--ease-emphasis);
+}
+
+@keyframes save-confirm {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .save-status--saved {
@@ -1149,7 +1330,8 @@ details.detail-panel .question-list {
   padding: 1.1rem 1.25rem;
   text-decoration: none;
   color: inherit;
-  transition: box-shadow 120ms ease, border-color 120ms ease;
+  transition: box-shadow var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
 }
 
 .submission-card:hover,
@@ -1478,7 +1660,7 @@ details.detail-panel .question-list {
   width: 100%;
   background: var(--accent);
   border-radius: 6px 6px 0 0;
-  transition: height 300ms ease;
+  transition: height var(--motion-slow) var(--ease-standard);
 }
 
 /*
@@ -1546,11 +1728,16 @@ details.dist-toggle summary::-webkit-details-marker {
 }
 
 details.dist-toggle summary::before {
-  content: '▸ ';
+  content: '▸';
+  display: inline-block;
+  margin-inline-end: 0.4rem;
+  /* One glyph that turns, rather than two glyphs that replace each other: `content` cannot be
+     transitioned, so swapping ▸ for ▾ could only ever be a jump cut. */
+  transition: transform var(--motion-fast) var(--ease-standard);
 }
 
 details.dist-toggle[open] summary::before {
-  content: '▾ ';
+  transform: rotate(90deg);
 }
 
 /* ---------------------------------------------------------------- dashboard: weakest topics */
@@ -1748,11 +1935,16 @@ details.ai-detail summary::-webkit-details-marker {
 }
 
 details.ai-detail summary::before {
-  content: '▸ ';
+  content: '▸';
+  display: inline-block;
+  margin-inline-end: 0.4rem;
+  /* One glyph that turns, rather than two glyphs that replace each other: `content` cannot be
+     transitioned, so swapping ▸ for ▾ could only ever be a jump cut. */
+  transition: transform var(--motion-fast) var(--ease-standard);
 }
 
 details.ai-detail[open] summary::before {
-  content: '▾ ';
+  transform: rotate(90deg);
 }
 
 /* Right-to-left support for the Arabic language state of Student Problems. Scoped to the section so
@@ -1770,4 +1962,454 @@ details.ai-detail[open] summary::before {
 
 [dir='rtl'] .field label {
   text-align: right;
+}
+
+/* ---------------------------------------------------------------- modal confirmation */
+
+/*
+  The native `<dialog>`, styled as one of this system's cards.
+
+  A modal is the one surface that genuinely floats above other content, so it is — with the floating
+  theme toggle — one of the two places where `--shadow-raised` is correct rather than decorative.
+  The `::backdrop` is a plain scrim rather than a blur, because the point of the dialog is that the
+  page behind it is visibly still there and out of reach: a blurred background reads as "this has
+  been replaced", which is a different and less true statement.
+
+  No entrance animation, deliberately. A confirmation that slides into view invites a click before it
+  has been read, and this one is asking about an irreversible action.
+
+  `max-width` rather than `width`, so the element keeps the user agent's `fit-content` sizing and
+  its `margin: auto` centring in the top layer.
+*/
+.confirm-dialog {
+  max-width: min(30rem, calc(100vw - 2.5rem));
+  padding: 1.5rem;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
+}
+
+.confirm-dialog::backdrop {
+  background: rgba(15, 23, 32, 0.45);
+}
+
+.confirm-dialog h2 {
+  margin-bottom: 0.75rem;
+}
+
+.confirm-dialog-body p {
+  margin: 0 0 0.75rem;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.confirm-dialog-body p:last-child {
+  margin-bottom: 1.25rem;
+}
+
+/* ---------------------------------------------------------------- staff shell, narrow */
+
+/*
+  The staff area at phone and small-tablet widths.
+
+  Until this block existed the shell had no responsive rules at all. `--sidebar-w` is a fixed
+  15.5rem, so at 375px the sidebar took two thirds of the viewport and left roughly 127px for the
+  content, and the three-column data grids (`6.5rem 1fr 3rem`) had nowhere to go but off the edge.
+
+  The sidebar becomes a horizontal bar rather than collapsing behind a menu button. A disclosure
+  would need its own open/closed state, focus handling, and a way to be reached by keyboard — all of
+  it to hide two navigation items and a sign-out button. Laying them in a row costs nothing and
+  hides nothing.
+
+  `position: static` is load-bearing rather than tidying: the sidebar is `position: sticky; height:
+  100vh` for the wide layout, and in a column flex container that pins a full viewport-height bar
+  across the top of the screen.
+*/
+@media (max-width: 40rem) {
+  .staff-shell {
+    flex-direction: column;
+  }
+
+  .staff-sidebar {
+    width: auto;
+    height: auto;
+    position: static;
+    border-inline-end: none;
+    border-bottom: 1px solid var(--line);
+    padding: 0.9rem 1rem;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  /* The wordmark keeps the left edge and pushes everything else to the right. */
+  .staff-sidebar .brand {
+    padding: 0 0.6rem 0 0.2rem;
+    margin-inline-end: auto;
+  }
+
+  .staff-nav-item {
+    margin-bottom: 0;
+  }
+
+  /* The sign-out joins the nav row, since the sidebar it used to sit at the bottom of is now a bar. */
+  .staff-sidebar-footer {
+    margin-top: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .staff-account {
+    margin-bottom: 0;
+  }
+
+  .staff-signout {
+    width: auto;
+  }
+
+  /* The pilot label is the first thing to go: it is decoration, and the bar has no room for it. */
+  .staff-footer-note {
+    display: none;
+  }
+
+  .staff-topbar {
+    padding: 0.9rem 1rem;
+  }
+
+  .staff-content {
+    padding: 1.25rem 1rem 3rem;
+  }
+
+  /* Label above bar, stacked. Three columns cannot fit here, and a squeezed bar chart is unreadable. */
+  .bar-row,
+  .rank-row,
+  .criteria-row {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+
+  .bar-value,
+  .rank-pct,
+  .criteria-value {
+    text-align: start;
+  }
+
+  .compare-chart {
+    gap: 0.9rem;
+  }
+}
+
+/* ---------------------------------------------------------------- print */
+
+/*
+  The report as a document.
+
+  The report is the one screen a reader is likely to want to keep or hand to a teacher, and it had
+  no print treatment at all: the floating theme toggle would print on top of the content, every card
+  border would print, and the question-by-question detail — the part most worth having on paper —
+  would print collapsed, because that is how it was left on screen.
+
+  Scoped to what actually prints rather than applied globally. Printing a staff dashboard or a
+  half-finished assessment is not a use this product has, and hiding the sidebar and the theme
+  toggle on every screen costs nothing while their absence on the two that do print is the point.
+*/
+@media print {
+  .theme-toggle,
+  .staff-sidebar,
+  .staff-topbar,
+  .confirm-dialog,
+  .button-row,
+  .save-status,
+  .staff-link {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+    font-size: 11pt;
+  }
+
+  .page,
+  .page--wide {
+    max-width: none;
+    padding: 0;
+  }
+
+  .page--toggle {
+    padding-top: 0;
+  }
+
+  .card {
+    border: 1px solid #999;
+    border-radius: 0;
+    /* A card split across a page break reads as two cards. */
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /*
+    CSS cannot set the `open` attribute, so both mechanisms a browser may use to hide closed
+    content are overridden: the legacy descendant rule, and the modern `::details-content` box.
+    The `summary` goes too — on paper the disclosure control is a word that opens nothing.
+  */
+  details > summary {
+    display: none;
+  }
+
+  details:not([open]) > *:not(summary) {
+    display: block !important;
+  }
+
+  details::details-content {
+    content-visibility: visible !important;
+  }
+
+  a {
+    color: #000;
+    text-decoration: none;
+  }
+}
+
+/* ---------------------------------------------------------------- reduced motion */
+
+/*
+  One rule, not a per-animation opt-in.
+
+  The system animates very little — a handful of state transitions of 120-300ms — but the mechanism
+  matters more than the current volume. Without it, every animation added later inherits the gap and
+  each one has to remember to opt in; with it, everything is covered including whatever comes next.
+
+  Collapsing the durations rather than setting `transition: none` is deliberate: a zero-length
+  transition still completes, so `transitionend` fires and any code waiting on one is not left
+  hanging. The transform half of a movement is neutralised by the duration being effectively zero —
+  the element arrives where it was going, immediately.
+
+  `scroll-behavior` is included for the one smooth scroll this system performs: moving to the
+  heading of the section a student has just switched to.
+*/
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------------------------------------------------------------- loading placeholders */
+
+/*
+  Skeletons (see `components/Skeleton.tsx`).
+
+  A pulse, not a shimmer. A moving highlight across each bar would be several animated gradients per
+  screen for a state that usually lasts a few hundred milliseconds, and the page would be busier
+  while loading than after. The pulse is one opacity animation on the container, it reads as "not
+  yet" without being mistaken for content, and the reduced-motion block at the end of this file
+  stops it entirely.
+
+  The shapes use `--surface-sunken` on `--paper` — the recessed step of the ladder the rest of the
+  system already uses — so a placeholder is visible in both themes without a second set of values.
+*/
+.skeleton-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.skeleton-line,
+.skeleton-heading,
+.skeleton-kpi {
+  display: block;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-line {
+  height: 0.75rem;
+}
+
+/* The last line is short, so a block reads as a paragraph rather than as a filled rectangle. */
+.skeleton-line--short {
+  width: 60%;
+}
+
+.skeleton-heading {
+  width: 40%;
+  height: 1.1rem;
+  margin-bottom: 1rem;
+}
+
+/* The dashboard's four-up strip, matched to `.kpi-row` so the real figures land where the shapes were. */
+.skeleton-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.skeleton-kpi {
+  height: 6.2rem;
+  border-radius: var(--radius-md);
+}
+
+/* The report's summary strip is the same four-up grid, shorter. */
+.skeleton-kpi--short {
+  height: 4.4rem;
+}
+
+/* The assessment's section chips: one row of pills, wrapped like the real navigation. */
+.skeleton-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-chip {
+  display: block;
+  width: 5.5rem;
+  height: 2.1rem;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-pill);
+}
+
+@media (max-width: 40rem) {
+  .skeleton-kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Applied to the containers rather than to each shape, so one animation drives a whole screen. */
+.skeleton-lines,
+.skeleton-kpi-row {
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/*
+  Visible to a screen reader, not to the eye.
+
+  Not `display: none` or `visibility: hidden`, either of which would remove it from the accessibility
+  tree as well — the entire point is that this text exists *only* there. `clip-path` is used rather
+  than the older `width: 1px; overflow: hidden` pair because it cannot be undone by a stray layout
+  change further up the tree.
+*/
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------- empty lists */
+
+/*
+  An empty list, said out loud and with somewhere to go (see `SubmissionsPage`).
+
+  Quieter than a notice on purpose. An empty state is not a problem — on the pilot's first morning it
+  is the expected state — and giving it a warning border would tell a staff member that something had
+  gone wrong when nothing has.
+
+  The lead line is `--ink-soft` rather than `--ink-faint`, so the statement is read before the
+  explanation under it rather than blending into it.
+*/
+.empty-state {
+  margin-top: 1rem;
+}
+
+.empty-state-lead {
+  margin: 0 0 0.35rem;
+  color: var(--ink-soft);
+}
+
+.empty-state .hint {
+  margin: 0 0 0.75rem;
+}
+
+/*
+  The second line of a notice, when the first one is not the whole story.
+
+  Currently one caller: the dashboard's staleness marker, where the notice reports a failed refetch
+  and this says how old the figures still on screen are. Smaller and softer than the notice's own
+  text, because it is context for the message above rather than a second message.
+*/
+.notice-detail {
+  margin: 0.4rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.87rem;
+}
+
+/* ---------------------------------------------------------------- section change */
+
+/*
+  Moving between assessment sections.
+
+  This is the cue that was missing, and the reason the change read as abrupt. Switching sections
+  replaces the card's contents and changes the route by nothing, so the only signal was the scroll —
+  and `scrollIntoView` does nothing at all when the new section's heading is already where the old
+  one was, which is the common case for two sections of similar length. Two short sections swapped
+  under a stationary viewport with no transition whatsoever, which is why it felt like the page had
+  simply been replaced rather than moved on.
+
+  So the transition is on the content, not only on the scroll: it is always visible, whether or not
+  there was anywhere to scroll to. Deliberately short and small — 200ms and 6px. This is navigation
+  rather than an acknowledgement, and its job is continuity: "the same page, showing a different
+  section" rather than "everything changed". Motion you notice during navigation is usually motion
+  that is too slow; motion you *don't* notice is the point.
+
+  `--ease-standard`, not `--ease-emphasis`: nothing is being confirmed here, so nothing should pop.
+*/
+.section-body {
+  animation: section-enter var(--motion-base) var(--ease-standard);
+}
+
+@keyframes section-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------- feedback arriving */
+
+/*
+  Writing feedback appearing on the report.
+
+  The same treatment as a section change and for the same reason, but this one is an arrival rather
+  than a navigation: the page has been polling, and results the student was told to wait for have
+  just replaced the panel that said so. Without it the swap is silent — the text is simply different
+  the next time they look at it — and `WritingArrivalAnnouncement` covers only the screen-reader
+  half of that.
+
+  Shares the section-change keyframes rather than defining a second, identical pair.
+*/
+.writing-arrival {
+  animation: section-enter var(--motion-base) var(--ease-standard);
 }

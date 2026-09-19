@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   ReportQuestion,
   ReportSection,
@@ -11,6 +11,7 @@ import {
   type ProcessingStatus,
 } from '../../../../src/shared/types/sections';
 import { ApiError, getReport } from '../../api/client';
+import { SkeletonCard, SkeletonStatus } from '../../components/Skeleton';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { navigate } from '../../router';
 
@@ -134,13 +135,23 @@ export function ReportPage() {
     );
   }
 
+  // The report's own opening sequence — intro, the four-tile summary strip, then the panels — so
+  // the figures land where the placeholder was rather than pushing a layout into existence.
   if (!report) {
     return (
-      <main className="page page--toggle">
+      <main className="page page--wide page--toggle">
         <ThemeToggle variant="floating" />
-        <div className="card">
-          <p className="lede">Loading your report…</p>
+        <SkeletonStatus label="Loading your report" />
+
+        <SkeletonCard lines={2} />
+
+        <div className="skeleton-kpi-row" aria-hidden="true">
+          {[0, 1, 2, 3].map((index) => (
+            <span key={index} className="skeleton-kpi skeleton-kpi--short" />
+          ))}
         </div>
+
+        <SkeletonCard lines={3} />
       </main>
     );
   }
@@ -165,6 +176,10 @@ export function ReportBody({ report }: { report: StudentReport }) {
   return (
     <main className="page page--wide page--toggle">
       <ThemeToggle variant="floating" />
+      <WritingArrivalAnnouncement
+        status={report.writingStatus}
+        hasResults={report.writing !== null}
+      />
       <div className="card">
         <h1>Your report</h1>
         <p className="lede">
@@ -194,6 +209,60 @@ export function ReportBody({ report }: { report: StudentReport }) {
         </p>
       </div>
     </main>
+  );
+}
+
+/**
+ * Says out loud that the writing feedback arrived.
+ *
+ * ## Why this has to live above the panel it is about
+ *
+ * The page polls every ten seconds while writing is outstanding, and when the answer changes it
+ * replaces `WritingPanel`'s contents in place. The "Checking for your feedback…" live region
+ * belonged to that panel, so it was removed at the exact moment it had something to announce, and
+ * the feedback that appeared underneath it was announced by nobody. A student using a screen reader
+ * — or simply not looking at that part of the page — had no signal that anything had changed, on a
+ * page whose entire purpose is to deliver it.
+ *
+ * This region sits at the top of the report and is never removed, so it survives the swap and can
+ * speak across it.
+ *
+ * ## Why it announces only a transition
+ *
+ * The first render is not a transition: the student is arriving at the page and will read it from
+ * the top, and the panel already states its own condition. Announcing then would say "your feedback
+ * is ready" to someone who has just opened a finished report, which is true and useless. So the
+ * previous status is remembered and only a move *out of* a waiting state is announced — which is
+ * exactly the event the poll exists to catch.
+ */
+function WritingArrivalAnnouncement({
+  status,
+  hasResults,
+}: {
+  status: ProcessingStatus;
+  hasResults: boolean;
+}) {
+  const previous = useRef<ProcessingStatus | null>(null);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    const was = previous.current;
+    previous.current = status;
+
+    if (was === null || was === status) return;
+    if (isWritingSettled(was)) return;
+
+    setMessage(
+      hasResults
+        ? 'Your writing feedback is ready. It is shown on this page.'
+        : 'Your writing feedback could not be prepared. The rest of your report is unaffected.',
+    );
+  }, [status, hasResults]);
+
+  return (
+    <p className="sr-only" role="status" aria-live="polite">
+      {message}
+    </p>
   );
 }
 
@@ -305,7 +374,9 @@ function WritingPanel({
   const { heading, body, waiting } = content[status];
 
   return (
-    <div className="card">
+    // The arrived-and-failed card gets the same entrance as the arrived-and-succeeded one: both are
+    // the waiting state being replaced, and only one of them should ever be a surprise.
+    <div className={waiting ? 'card' : 'card writing-arrival'}>
       <h2>{heading}</h2>
       <p>{body}</p>
       {waiting && (
@@ -353,7 +424,8 @@ const FAILED_WRITING = {
  */
 function WritingResults({ writing }: { writing: ReportWriting }) {
   return (
-    <div className="card">
+    // `writing-arrival` fades this in as it replaces the "still being prepared" panel.
+    <div className="card writing-arrival">
       <h2>
         Your writing feedback{' '}
         <span className="score">

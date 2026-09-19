@@ -1,5 +1,6 @@
 import express from 'express';
 import { stringify } from 'csv-stringify';
+import type { Input, Options } from 'csv-stringify';
 import { z } from 'zod';
 import type { Cohort, Submission } from '@prisma/client';
 import type { StudentProblemsCategory, WritingCorrection } from '../ai/AIEvaluationService.ts';
@@ -285,18 +286,34 @@ staffRouter.get('/submissions/:id', requireStaffSession, async (req, res, next) 
 });
 
 /**
- * The streamed CSV export (FR-STAFF-011, Section 10, PRD G5).
+ * The CSV export (FR-STAFF-011, Section 10, PRD G5).
  *
  * Requires a staff session like every other staff route but login. The column and cell rules are
  * documented on the shaping helpers below; what belongs here is the HTTP contract.
  *
- * ## Why this is a stream and not a JSON body
+ * ## Why this is assembled and not streamed — a deliberate departure from Section 2's wording
  *
- * `csv-stringify` is in Section 2's dependency list for exactly this: *"Streaming CSV export for the
- * staff dashboard"*. `stringify(...)` is a Readable, so the file is written to the socket as it is
- * produced instead of being assembled into one string and handed to `res.send`. At a few hundred
- * rows the difference is small; it is the difference the architecture asked for, and it is the one
- * that does not need revisiting if the pilot grows.
+ * Section 2 lists `csv-stringify` as *"Streaming CSV export for the staff dashboard"*, and this
+ * route used to pipe the Readable straight to the socket. It no longer does, and the reason is a
+ * correctness one that the streaming form could not satisfy.
+ *
+ * A streamed response cannot carry a `Content-Length`: the size is not known when the headers go
+ * out, so the header is omitted and the body is terminated by closing the connection. That leaves
+ * the client unable to distinguish a complete download from one that died half-way. A failure
+ * mid-stream cannot become a `500` either — the status line is long gone — so `errorHandler` sees
+ * `headersSent` and destroys the connection, and the browser hands the staff member a **200 with a
+ * truncated body**. `downloadStaffExportCsv` resolved normally and the partial file was saved as if
+ * it were the data. Silent data corruption on the one screen whose entire purpose is getting the
+ * data out is not a trade worth making for memory that this product will not miss.
+ *
+ * Assembling the CSV first makes the response a complete, measurable thing: `Content-Length` is
+ * exact, a failure to produce it happens *before* the headers and therefore becomes an honest
+ * `500`, and the client can verify what it received. At a pilot's scale — one cohort, low tens of
+ * submissions — the whole export is a few tens of kilobytes held for the length of one response.
+ * If the pilot ever grows enough for that to matter, the fix is paging the export, not un-measuring
+ * it.
+ *
+ * `csv-stringify` stays in the dependency set; only the use of its Readable form is given up.
  *
  * ## Why the cohort is resolved before the rows
  *
@@ -342,21 +359,41 @@ staffRouter.get('/export.csv', requireStaffSession, async (req, res, next) => {
     const columns = exportColumns(submissions, content);
     const rows = submissions.map((submission) => toExportRow(submission, content));
 
+    // Built before any header is set, so a failure to produce the file is still a state the response
+    // can describe honestly. See the route's doc comment for why this is assembled rather than piped.
+    const csv = await stringifyToEnd(rows, { header: true, columns });
+
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${exportFilename(cohort)}"`);
+    // Measured in bytes, not characters: the CSV can carry Arabic from a Student Problems response,
+    // and a length counted in code units would be short by one for every multi-byte character — the
+    // client's completeness check would then reject a perfectly good download.
+    res.setHeader('Content-Length', Buffer.byteLength(csv, 'utf8'));
 
-    const csv = stringify(rows, { header: true, columns });
-
-    // A failure mid-stream cannot become a 500 — the status line is long gone by then — so it ends
-    // the response instead. Attaching the handler to the stream rather than wrapping the pipe in a
-    // try/catch is what makes that possible: the error arrives asynchronously.
-    csv.on('error', next);
-    csv.pipe(res);
+    res.send(csv);
   } catch (error) {
     // Express 4 does not forward rejections from an async handler on its own.
     next(error);
   }
 });
+
+/**
+ * The whole CSV, as one string.
+ *
+ * `stringify` is a Readable, and its callback form is the supported way to consume it to the end —
+ * the alternative, collecting the stream by hand, would be re-implementing what the callback already
+ * does. Errors are rejected rather than thrown so the route's existing `try/catch` handles a
+ * serialization failure the same way it handles a database one: as a `500` sent before any header,
+ * which is the whole point of building the body first.
+ */
+function stringifyToEnd(rows: Input, options: Options): Promise<string> {
+  return new Promise((resolve, reject) => {
+    stringify(rows, options, (error, output) => {
+      if (error) reject(error);
+      else resolve(output);
+    });
+  });
+}
 
 /**
  * The download's filename.

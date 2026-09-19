@@ -52,6 +52,20 @@ export function ThemeToggle({ variant = 'topbar' }: { variant?: 'topbar' | 'floa
 
   const dark = theme === 'dark';
 
+  /*
+    The label names the mode; `aria-pressed` says whether it is on.
+
+    Written this way because the previous arrangement contradicted itself. The label changed with
+    the theme — "Light mode" while in dark mode — and `aria-pressed` was bound to `dark` at the same
+    time, so a screen reader announced "Light mode, pressed", which states that light mode is active
+    while the page is dark. It also meant the control had two different accessible names, so it could
+    not be found by name after being used once.
+
+    Now the name is stable — "Dark mode" — and `aria-pressed` carries the state, which is the
+    arrangement a toggle button is defined by: "Dark mode, pressed" in dark mode, "Dark mode, not
+    pressed" in light. The icon still previews what pressing will do, which is the useful visual
+    affordance and needs no announcement: it is decorative and hidden from assistive technology.
+  */
   return (
     <button
       type="button"
@@ -60,7 +74,7 @@ export function ThemeToggle({ variant = 'topbar' }: { variant?: 'topbar' | 'floa
       aria-pressed={dark}
     >
       {dark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
-      {dark ? 'Light mode' : 'Dark mode'}
+      Dark mode
     </button>
   );
 }

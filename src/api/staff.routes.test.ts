@@ -890,6 +890,38 @@ describe('GET /api/staff/export.csv', () => {
     expect(response.text.split('\n')[0]).toContain('submission_id');
   });
 
+  /**
+   * The declared length is what lets the browser tell a finished download from a broken one.
+   *
+   * `downloadStaffExportCsv` refuses a body whose byte count disagrees with `Content-Length`, which
+   * is the only way it can detect a connection that died mid-response — a streamed export sent a
+   * `200` with a partial body and no way to notice. That check is worthless if the server states a
+   * length that is wrong, so the length is asserted against the bytes rather than against a
+   * constant.
+   *
+   * The Arabic name is the point of the test, not decoration. A length counted in characters rather
+   * than bytes would be short by one for every one of those letters, and the client would reject a
+   * perfectly good file. Student names and Student Problems free text are both stored exactly as
+   * typed, and the second is explicitly permitted to be Arabic (FR-PROB-009) — so multi-byte content
+   * in this export is the normal case.
+   */
+  it('states a Content-Length that matches the bytes it actually sends', async () => {
+    const agent = await signedInStaff();
+    const cohort = await createCohort({ code: 'BYTES-2026', name: 'Bytes Cohort' });
+    await createExportableSubmission(cohort.id, '2021-777', 'ليلى مثال');
+
+    const response = await agent.get('/api/staff/export.csv').expect(200);
+
+    const declared = Number(response.headers['content-length']);
+    const actual = Buffer.byteLength(response.text, 'utf8');
+
+    expect(Number.isSafeInteger(declared)).toBe(true);
+    expect(declared).toBe(actual);
+    // The name survived the round trip, so the length is being measured over content that is
+    // genuinely multi-byte rather than over a body the encoding flattened.
+    expect(response.text).toContain('ليلى مثال');
+  });
+
   it('refuses a filter that names no cohort', async () => {
     const agent = await signedInStaff();
 

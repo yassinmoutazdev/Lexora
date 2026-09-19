@@ -72,6 +72,31 @@ export function StudentProblemsSection({
 
   // Defaults to Arabic (the pilot cohort's language), switchable per FR — see the class doc above.
   const [language, setLanguage] = useState<StudentProblemsLanguage>('ar');
+
+  /**
+   * What a screen reader is told when the display language changes.
+   *
+   * Switching languages flips the whole section's direction and replaces every statement, area
+   * label, and instruction in one render. For anyone reading the page rather than seeing it, that
+   * is a large change with no event attached to it: the buttons carry `aria-pressed` so their own
+   * state is correct, but nothing says that the text around them has been rewritten. This does.
+   *
+   * It reports the language now in use rather than the change itself — "shown in Arabic" is the
+   * fact someone needs, and it stays true while the section stays in that language.
+   */
+  const [languageAnnouncement, setLanguageAnnouncement] = useState('');
+
+  function chooseLanguage(next: StudentProblemsLanguage) {
+    // Pressing the language already in use should not re-announce it as though something changed.
+    if (next === language) return;
+
+    setLanguage(next);
+    setLanguageAnnouncement(
+      next === 'ar'
+        ? 'The statements are now shown in Arabic.'
+        : 'The statements are now shown in English.',
+    );
+  }
   const t = translateStudentProblems(instrument, language);
   const dir = language === 'ar' ? 'rtl' : 'ltr';
 
@@ -93,6 +118,10 @@ export function StudentProblemsSection({
         </div>
       </div>
 
+      <p className="sr-only" role="status" aria-live="polite">
+        {languageAnnouncement}
+      </p>
+
       <div className="problems-header">
         <p className="hint" style={{ margin: 0, flex: '1 1 16rem' }}>
           {t.instructions}
@@ -102,14 +131,14 @@ export function StudentProblemsSection({
           <button
             type="button"
             aria-pressed={language === 'ar'}
-            onClick={() => setLanguage('ar')}
+            onClick={() => chooseLanguage('ar')}
           >
             AR
           </button>
           <button
             type="button"
             aria-pressed={language === 'en'}
-            onClick={() => setLanguage('en')}
+            onClick={() => chooseLanguage('en')}
           >
             EN
           </button>

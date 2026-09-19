@@ -8,6 +8,7 @@ import type {
   WritingCriterionAggregate,
 } from '../../../../src/domain/staff/DashboardService';
 import { ApiError, downloadStaffExportCsv, getStaffDashboard } from '../../api/client';
+import { SkeletonCard, SkeletonLines, SkeletonStatus } from '../../components/Skeleton';
 import { StaffLayout } from '../../components/StaffLayout';
 import { Link, navigate, submissionDetailPath } from '../../router';
 
@@ -56,6 +57,14 @@ export function DashboardPage() {
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  /**
+   * When the figures currently on screen were fetched.
+   *
+   * Kept so that a failed refetch can say how old they are. Without it the notice reported the
+   * failure while the numbers above it stayed looking current — and a stale figure that looks
+   * current is worse than no figure, because it will be acted on.
+   */
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
@@ -70,6 +79,7 @@ export function DashboardPage() {
 
         setDashboard(loaded);
         setLoadError(null);
+        setLoadedAt(new Date());
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -142,27 +152,43 @@ export function DashboardPage() {
     }
   }
 
+  /*
+    Both shell states render *inside* `StaffLayout`.
+
+    They used to return a bare `<main className="page">` with a single card and no sidebar at all,
+    which meant the whole application shell disappeared at exactly the two moments a staff member
+    most needs to know where they are: while the page is loading, and when it has failed. Loading
+    swapped a narrow centred card for a full sidebar shell — a full-page layout jump on every visit
+    — and an error left the reader with no navigation and "reload" as the only way forward.
+
+    The heading is an `h2` because the shell's topbar already owns the page's `h1`.
+  */
   if (loadError !== null && dashboard === null) {
     return (
-      <main className="page">
+      <StaffLayout activeItem="dashboard" title="Assessment dashboard">
         <div className="card">
-          <h1>We could not load the dashboard</h1>
+          <h2>We could not load the dashboard</h2>
           <div className="notice" role="alert">
             <p>{loadError}</p>
           </div>
-          <p className="hint">Reload this page to try again.</p>
+          <p className="hint">
+            Your session is still active, and nothing has been lost. Reloading usually fixes this.
+          </p>
+          <div className="button-row">
+            <button type="button" onClick={() => window.location.reload()}>
+              Reload
+            </button>
+          </div>
         </div>
-      </main>
+      </StaffLayout>
     );
   }
 
   if (dashboard === null) {
     return (
-      <main className="page">
-        <div className="card">
-          <p className="lede">Loading dashboard…</p>
-        </div>
-      </main>
+      <StaffLayout activeItem="dashboard" title="Assessment dashboard">
+        <DashboardSkeleton />
+      </StaffLayout>
     );
   }
 
@@ -173,10 +199,40 @@ export function DashboardPage() {
       onCohortChange={setCohortId}
       loading={loading}
       notice={loadError}
+      figuresAsOf={loadedAt}
       onExport={handleExport}
       exporting={exporting}
       exportError={exportError}
     />
+  );
+}
+
+/**
+ * The dashboard's shape, before its numbers arrive.
+ *
+ * Mirrors the real page's opening sequence — an intro card, the four-up KPI strip, then content
+ * cards — so the figures land where the placeholder was rather than pushing a layout into existence.
+ * It does not mirror the whole page: a skeleton the length of a dashboard would promise more than it
+ * can deliver and take longer to scroll past than the data takes to arrive.
+ */
+function DashboardSkeleton() {
+  return (
+    <>
+      <SkeletonStatus label="Loading the dashboard" />
+
+      <div className="card">
+        <SkeletonLines count={2} />
+      </div>
+
+      <div className="skeleton-kpi-row" aria-hidden="true">
+        {[0, 1, 2, 3].map((index) => (
+          <span key={index} className="skeleton-kpi" />
+        ))}
+      </div>
+
+      <SkeletonCard lines={4} />
+      <SkeletonCard lines={3} />
+    </>
   );
 }
 
@@ -195,6 +251,7 @@ export function DashboardBody({
   onCohortChange,
   loading = false,
   notice = null,
+  figuresAsOf = null,
   onExport,
   exporting = false,
   exportError = null,
@@ -204,6 +261,8 @@ export function DashboardBody({
   onCohortChange: (cohortId: string) => void;
   loading?: boolean;
   notice?: string | null;
+  /** When the payload was fetched, so a failed refetch can mark what is on screen as old. */
+  figuresAsOf?: Date | null;
   onExport: () => void;
   exporting?: boolean;
   exportError?: string | null;
@@ -219,9 +278,22 @@ export function DashboardBody({
           {dashboard.cohort === null ? 'all cohorts' : dashboard.cohort.code}.
         </p>
 
+        {/*
+          A notice inside this body always means "the numbers below are the previous ones" — the
+          shell renders its own error state when there is no payload at all — so it says so, and
+          says when they were fetched. The alternative was a failure message with figures under it
+          that looked freshly loaded.
+        */}
         {notice !== null && (
           <div className="notice" role="alert">
             <p>{notice}</p>
+            {figuresAsOf !== null && (
+              <p className="notice-detail">
+                The figures below are from the last successful load
+                {figuresAsOf !== null && <> at {figuresAsOf.toLocaleTimeString()}</>}. They may not
+                include recent submissions.
+              </p>
+            )}
           </div>
         )}
 

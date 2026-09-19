@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   AssessmentContent,
   ChoiceAnswers,
@@ -8,6 +8,8 @@ import { SECTION_KEYS, type SectionKey } from '../../../../src/shared/types/sect
 import { ApiError, getDraft, submitAssessment } from '../../api/client';
 import { assessCompleteness } from '../../assessmentCompleteness';
 import { ChoiceQuestions } from '../../components/ChoiceQuestions';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { SkeletonCard, SkeletonLines, SkeletonStatus } from '../../components/Skeleton';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { useAutosave } from '../../hooks/useAutosave';
 import { navigate } from '../../router';
@@ -103,13 +105,24 @@ export function AssessmentPage() {
     );
   }
 
+  // The shape of the assessment rather than a sentence about it: the navigation row and a tall
+  // card, so the questions land where the placeholder was. See `components/Skeleton.tsx`.
   if (!draft) {
     return (
-      <main className="page page--toggle">
+      <main className="page page--wide page--toggle">
         <ThemeToggle variant="floating" />
+        <SkeletonStatus label="Loading your assessment" />
+
         <div className="card">
-          <p className="lede">Loading your assessment…</p>
+          <SkeletonLines count={2} />
+          <div className="skeleton-chips" aria-hidden="true">
+            {[0, 1, 2, 3, 4].map((index) => (
+              <span key={index} className="skeleton-chip" />
+            ))}
+          </div>
         </div>
+
+        <SkeletonCard lines={6} />
       </main>
     );
   }
@@ -133,6 +146,56 @@ function AssessmentWorkspace({
   const { status, flush } = useAutosave(activeSection, answers[activeSection]);
 
   const position = SECTION_KEYS.indexOf(activeSection);
+
+  /**
+   * Which sections are finished, from the same call that gates the submit button.
+   *
+   * One source for both, so the tick beside a section's name and the reason Submit is disabled
+   * cannot disagree — a navigation that marked Vocabulary done while the submit panel listed it as
+   * unfinished would leave the student with two answers and no way to tell which was right.
+   */
+  const completeness = assessCompleteness(content, answers);
+  const finishedSections = new Set(
+    SECTION_KEYS.filter((section) => !completeness.incompleteSections.includes(section)),
+  );
+
+  /** The heading of the section on screen, which a section change moves the reader to. */
+  const sectionHeading = useRef<HTMLHeadingElement>(null);
+
+  /**
+   * Moving between sections is a change of place, so the reader is moved with it.
+   *
+   * Switching sections replaces the card's contents without changing the route, so none of the
+   * route-level handling applies. On a long section — Reading renders every passage and every
+   * question in one card — a student who scrolls to the bottom and then chooses "Grammar" used to
+   * land at the same offset inside a much shorter section, looking at the middle of a question.
+   *
+   * Focus moves as well as the scroll, because the two are one action for anyone using a keyboard:
+   * the heading is where the new section begins, and it is what a screen reader should read next.
+   *
+   * Skipped on the first render: arriving at the assessment already scrolls and focuses via
+   * `useRouteAnnouncement`, and doing it again here would fight it.
+   *
+   * The reduced-motion preference is read here rather than left to CSS, because `scrollIntoView`'s
+   * `behavior` option overrides the `scroll-behavior` property outright — a stylesheet cannot
+   * soften a scroll that JavaScript asked to be smooth.
+   */
+  const hasRendered = useRef(false);
+
+  useEffect(() => {
+    if (!hasRendered.current) {
+      hasRendered.current = true;
+      return;
+    }
+
+    const heading = sectionHeading.current;
+    if (heading === null) return;
+
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    heading.focus({ preventScroll: true });
+    heading.scrollIntoView({ block: 'start', behavior: reduced ? 'auto' : 'smooth' });
+  }, [activeSection]);
 
   /** Records one choice answer under its section, leaving every other section untouched. */
   function answerChoice(
@@ -168,36 +231,64 @@ function AssessmentWorkspace({
 
         <nav aria-label="Assessment sections">
           <ul className="section-nav">
-            {SECTION_KEYS.map((section) => (
-              <li key={section}>
-                <button
-                  type="button"
-                  aria-current={section === activeSection ? 'true' : undefined}
-                  onClick={() => setActiveSection(section)}
-                >
-                  {/* The label is the content's own title, so navigation cannot name a section
-                      differently from the section it opens. */}
-                  {content[section].title}
-                </button>
-              </li>
-            ))}
+            {SECTION_KEYS.map((section) => {
+              const finished = finishedSections.has(section);
+
+              return (
+                <li key={section}>
+                  <button
+                    type="button"
+                    aria-current={section === activeSection ? 'true' : undefined}
+                    /*
+                      The tick is a mark, not a word, so the state travels in the button's name
+                      instead. Without this a screen reader hears five section titles and no
+                      indication of which are done — the one thing this navigation now says.
+                    */
+                    aria-label={`${content[section].title} — ${finished ? 'finished' : 'not finished yet'}`}
+                    onClick={() => setActiveSection(section)}
+                  >
+                    {/* The label is the content's own title, so navigation cannot name a section
+                        differently from the section it opens. */}
+                    {content[section].title}
+                    {finished && (
+                      <span className="tick" aria-hidden="true">
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </nav>
       </div>
 
       <div className="card">
-        <h2>{content[activeSection].title}</h2>
+        {/* A focus target for section changes, not a control — `tabIndex={-1}` keeps it out of the
+            tab order while letting the effect above move focus here. */}
+        <h2 ref={sectionHeading} tabIndex={-1}>
+          {content[activeSection].title}
+        </h2>
         <p className="hint">{content[activeSection].instructions}</p>
 
-        <SectionBody
-          section={activeSection}
-          content={content}
-          answers={answers}
-          onAnswerChoice={answerChoice}
-          onUpdateWriting={updateWriting}
-          onUpdateStudentProblems={updateStudentProblems}
-          onEditingDone={flush}
-        />
+        {/*
+          Keyed on the section, so changing sections remounts this subtree and its entrance
+          animation fires. Without the key React reconciles what it can and the only visible change
+          would be the content itself — which is exactly the abrupt swap the transition exists to
+          remove. Remounting costs nothing here: every answer is controlled from `answers` above, so
+          nothing is lost, and the autosave hook lives in the workspace rather than in here.
+        */}
+        <div className="section-body" key={activeSection}>
+          <SectionBody
+            section={activeSection}
+            content={content}
+            answers={answers}
+            onAnswerChoice={answerChoice}
+            onUpdateWriting={updateWriting}
+            onUpdateStudentProblems={updateStudentProblems}
+            onEditingDone={flush}
+          />
+        </div>
 
         <div className="button-row" style={{ marginTop: '1.5rem' }}>
           <button
@@ -218,8 +309,17 @@ function AssessmentWorkspace({
           </button>
         </div>
 
+        {/*
+          Where the student is, and how much is left — on every section, not only the last one.
+
+          The count used to be the whole line, which answered "how far through am I" but not "am I
+          finished", and the second question was only answerable by reaching section five and
+          reading the submit panel. Both facts now sit together, because they are the same question
+          asked twice.
+        */}
         <p className="progress">
-          Section {position + 1} of {SECTION_KEYS.length}
+          Section {position + 1} of {SECTION_KEYS.length} · {finishedSections.size} of{' '}
+          {SECTION_KEYS.length} sections finished
         </p>
 
         <SaveStatus status={status} />
@@ -246,18 +346,32 @@ function AssessmentWorkspace({
  * from `assessCompleteness`, which is the same call that disables the button — the two cannot
  * disagree.
  *
- * ## Why it flushes before submitting
+ * ## Why it flushes before asking, and not after
  *
  * The debounce means the last thing the student typed may still be sitting in this tab. Submitting
  * without flushing it would finalize the submission from the last *saved* state, and the server
  * would then score answers missing their final sentence — and the submission is immutable, so there
- * would be no way to put it right. The flush is awaited for exactly that reason.
+ * would be no way to put it right. So the flush is awaited, and it is awaited **before the
+ * confirmation opens** rather than after it: a dialog that described one set of answers while a
+ * different set was on its way would be worse than no dialog at all.
+ *
+ * ## Why there is a confirmation at all
+ *
+ * `FR-ASSESS-008` makes the submission final and `FR-STU-007` forbids a retake, so this is the one
+ * irreversibly destructive action in the product and it used to take a single click. The dialog
+ * states the consequence in the same words the panel above it already used — that part was never
+ * the problem — and adds the step that makes it a decision rather than a slip.
  *
  * ## Why the refusal is shown rather than worked around
  *
  * Completeness is checked server-side inside `finalize()` (T5.2.1) and the browser is not trusted
  * (Section 12). If the server refuses, this control says so and leaves the student where they can
  * fix it — it does not retry, override, or assume the client's own check was right.
+ *
+ * When the server refuses for incompleteness it names the sections it thinks are unfinished, and
+ * those are rendered below its message. That list normally agrees with the client's own gate; when
+ * it does not, the student is looking at the one case where this page's model was wrong, and the
+ * server's answer is the one that will let them submit.
  */
 function SubmitControl({
   content,
@@ -268,27 +382,56 @@ function SubmitControl({
   answers: DraftAnswers;
   onEditingDone: () => Promise<void>;
 }) {
-  const [submitting, setSubmitting] = useState(false);
+  /**
+   * The two-step submit, as one value rather than two booleans.
+   *
+   * `preparing` (flushing the pending autosave) and `submitting` (the request is away) look similar
+   * but are different promises to the reader — one is "we are making sure nothing is left out", the
+   * other is "this is happening now" — and modelling them as `busy` plus `submitting` would allow
+   * the impossible combination of both.
+   */
+  const [phase, setPhase] = useState<'idle' | 'preparing' | 'confirming' | 'submitting'>('idle');
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [refusedSections, setRefusedSections] = useState<SectionKey[]>([]);
 
   const completeness = assessCompleteness(content, answers);
   const titles = Object.fromEntries(
     SECTION_KEYS.map((section) => [section, content[section].title]),
   ) as Record<SectionKey, string>;
 
-  async function handleSubmit() {
-    setSubmitting(true);
+  /** Save whatever is still pending, then open the confirmation. */
+  async function prepareSubmit() {
+    setPhase('preparing');
     setSubmitError(null);
+    setRefusedSections([]);
 
     try {
       await onEditingDone();
+      setPhase('confirming');
+    } catch {
+      // Submitting now would leave the last edit out of a submission that can never be amended, so
+      // the action stops here rather than proceeding on a partial save.
+      setSubmitError(
+        'We could not save your last changes, so submitting now would leave them out. Check your ' +
+          'connection and try again — your earlier answers are safe.',
+      );
+      setPhase('idle');
+    }
+  }
+
+  async function confirmSubmit() {
+    setPhase('submitting');
+    setSubmitError(null);
+
+    try {
       await submitAssessment();
       // `replace`: the assessment is finished, and stepping back into it would only bounce the
       // student forward again (Section 9 — a submitted student belongs on their report).
       navigate('/report', { replace: true });
     } catch (error) {
       setSubmitError(error instanceof ApiError ? error.message : 'Something went wrong');
-      setSubmitting(false);
+      setRefusedSections(error instanceof ApiError ? incompleteSectionsFrom(error) : []);
+      setPhase('idle');
     }
   }
 
@@ -313,15 +456,67 @@ function SubmitControl({
       {submitError !== null && (
         <div className="notice" role="alert">
           <p>{submitError}</p>
+          {refusedSections.length > 0 && (
+            <ul className="incomplete-sections">
+              {refusedSections.map((section) => (
+                <li key={section}>{titles[section] ?? section}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
       <div className="button-row">
-        <button type="button" onClick={handleSubmit} disabled={!completeness.complete || submitting}>
-          {submitting ? 'Submitting…' : 'Submit assessment'}
+        <button
+          type="button"
+          onClick={() => void prepareSubmit()}
+          disabled={!completeness.complete || phase !== 'idle'}
+          aria-busy={phase === 'preparing'}
+        >
+          {phase === 'preparing' ? 'Saving your last changes…' : 'Submit assessment'}
         </button>
       </div>
+
+      <ConfirmDialog
+        open={phase === 'confirming' || phase === 'submitting'}
+        title="Submit your assessment?"
+        confirmLabel="Submit final answers"
+        busyLabel="Submitting…"
+        busy={phase === 'submitting'}
+        onConfirm={() => void confirmSubmit()}
+        onCancel={() => setPhase('idle')}
+      >
+        <p>
+          Once you submit, your answers become final. You will not be able to change them, and you
+          will not be able to take the assessment again.
+        </p>
+        <p>
+          Your Grammar, Vocabulary, and Reading results appear straight away. Your writing feedback
+          is prepared in the background and appears on the same report when it is ready.
+        </p>
+      </ConfirmDialog>
     </div>
+  );
+}
+
+/**
+ * The section keys the server named when it refused a submit for incompleteness.
+ *
+ * Read defensively, because `body` is whatever the response parsed to — for a refusal from a proxy
+ * or an unexpected path that is not the shape Section 11 describes, and an unguarded cast would
+ * turn a malformed body into a crash inside the catch block that exists to prevent one. Anything
+ * that is not a list of section keys this client recognises is reported as "the server did not
+ * say", and the message alone is shown — which is what this page did before the field was read.
+ */
+function incompleteSectionsFrom(error: ApiError): SectionKey[] {
+  const { body } = error;
+  if (typeof body !== 'object' || body === null) return [];
+
+  const { incompleteSections } = body as { incompleteSections?: unknown };
+  if (!Array.isArray(incompleteSections)) return [];
+
+  return incompleteSections.filter((section): section is SectionKey =>
+    SECTION_KEYS.includes(section as SectionKey),
   );
 }
 

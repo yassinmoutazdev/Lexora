@@ -17,11 +17,33 @@ The project documents live in `docs/`:
 | Product requirements | `docs/English_Assessment_Pilot_PRD_v1.1.md` | the PRD |
 | Technical architecture | `docs/ARCHITECTURE_v1.1.md` | the Architecture |
 | Implementation plan | `docs/TASK_PLAN_v1.1.md` | the Task plan |
+| UX audit | `docs/UX-AUDIT.md` | the UX audit |
+| UX implementation plan | `docs/UX-IMPLEMENTATION-PLAN.md` | the UX plan |
+| UX conventions | `docs/UX-DECISIONS.md` | the UX decisions |
 
 1. PRD — product behavior and requirements.
 2. Architecture — technical decisions, canonical file locations (Section 18), schema, API contracts.
 3. Task plan — implementation order, task scope, verification criteria, completion state.
-4. `CLAUDE.md` — how to operate in this repository.
+4. The three UX documents — the behavioural UX layer: what was wrong and the evidence
+   (`UX-AUDIT.md`), the approved plan (`UX-IMPLEMENTATION-PLAN.md`), and the conventions a future
+   change must follow (`UX-DECISIONS.md`). **Read `UX-DECISIONS.md` before changing how the
+   application behaves.**
+5. `CLAUDE.md` — how to operate in this repository.
+
+### Files that live at the repository root, and why
+
+`PRODUCT.md`, `DESIGN.md`, and `.impeccable/` stay at the root **by tooling contract, not by
+preference** — the `impeccable` plugin resolves them relative to the project root (verified: its
+`context` command reports `productPath: "PRODUCT.md"` and `designPath: "DESIGN.md"`). Moving them
+into `docs/` breaks `/impeccable document`, `/impeccable critique`, and the live panel.
+
+- `PRODUCT.md` — durable product truth (users, purpose, constraints). Not visual.
+- `DESIGN.md` — the visual system: tokens, components, and the named rules. **Read it before
+  changing anything visual.**
+- `.impeccable/design.json` — generated sidecar (tonal ramps, motion, components). Regenerate it
+  with `DESIGN.md`, never by hand.
+
+Everything else belongs in `docs/`.
 
 Section numbers cited below (e.g. "Section 15") always refer to the Architecture document unless stated otherwise. The Task plan is the checklist of record; tick a box there only after its `Output:` condition is verified.
 

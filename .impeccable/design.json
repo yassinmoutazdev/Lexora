@@ -1,0 +1,291 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-19T00:00:00.000Z",
+  "title": "Design System: Lexora",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#16191d",
+        "tonalRamp": ["#0d0f12", "#16191d", "#2a2f36", "#414852", "#565f6b", "#8892a0", "#c3c9d2", "#eceef2"]
+      },
+      "ink-soft": {
+        "role": "neutral",
+        "displayName": "Soft Ink",
+        "canonical": "#565f6b",
+        "tonalRamp": ["#0d0f12", "#16191d", "#2a2f36", "#414852", "#565f6b", "#8892a0", "#c3c9d2", "#eceef2"]
+      },
+      "ink-faint": {
+        "role": "neutral",
+        "displayName": "Faint Ink",
+        "canonical": "#8892a0",
+        "tonalRamp": ["#0d0f12", "#16191d", "#2a2f36", "#414852", "#565f6b", "#8892a0", "#c3c9d2", "#eceef2"]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#12161b", "#1b1f26", "#3a414b", "#5b636e", "#7d8691", "#a8b0ba", "#d5dae1", "#ffffff"]
+      },
+      "page": {
+        "role": "neutral",
+        "displayName": "Page Grey",
+        "canonical": "#f3f5f8",
+        "tonalRamp": ["#12161b", "#1f242c", "#3a414b", "#5b636e", "#7d8691", "#a8b0ba", "#d5dae1", "#f3f5f8"]
+      },
+      "surface-sunken": {
+        "role": "neutral",
+        "displayName": "Sunken",
+        "canonical": "#eceef2",
+        "tonalRamp": ["#14171c", "#20242c", "#3a414b", "#5b636e", "#7d8691", "#a8b0ba", "#d5dae1", "#eceef2"]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "canonical": "#dde1e7",
+        "tonalRamp": ["#181c22", "#252a32", "#3f4650", "#5f6771", "#7f8791", "#a9b1ba", "#dde1e7", "#f2f4f7"]
+      },
+      "line-soft": {
+        "role": "neutral",
+        "displayName": "Soft Rule",
+        "canonical": "#e9ecf0",
+        "tonalRamp": ["#181c22", "#252a32", "#3f4650", "#5f6771", "#7f8791", "#a9b1ba", "#d0d5db", "#e9ecf0"]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Examination Navy",
+        "canonical": "#1e5c8c",
+        "tonalRamp": ["#0a2740", "#0f3a5c", "#134369", "#1e5c8c", "#4a89b8", "#8ab8d8", "#cfe3f0", "#e9f1f8"]
+      },
+      "accent-strong": {
+        "role": "primary",
+        "displayName": "Deep Examination Navy",
+        "canonical": "#134369",
+        "tonalRamp": ["#071c2e", "#0b2b45", "#134369", "#1e5c8c", "#4a89b8", "#8ab8d8", "#cfe3f0", "#e9f1f8"]
+      },
+      "accent-soft": {
+        "role": "primary",
+        "displayName": "Navy Wash",
+        "canonical": "#e9f1f8",
+        "tonalRamp": ["#0a2740", "#0f3a5c", "#134369", "#1e5c8c", "#4a89b8", "#8ab8d8", "#cfe3f0", "#e9f1f8"]
+      },
+      "accent-soft-strong": {
+        "role": "primary",
+        "displayName": "Navy Wash Strong",
+        "canonical": "#d7e6f2",
+        "tonalRamp": ["#0a2740", "#0f3a5c", "#134369", "#1e5c8c", "#4a89b8", "#8ab8d8", "#d7e6f2", "#e9f1f8"]
+      },
+      "success": {
+        "role": "secondary",
+        "displayName": "Retention Green",
+        "canonical": "#2b7a53",
+        "tonalRamp": ["#0b2c1c", "#14512f", "#1f6b44", "#2b7a53", "#4d9c73", "#7fc09d", "#b8e0cc", "#e9f6ee"]
+      },
+      "warning": {
+        "role": "secondary",
+        "displayName": "Review Amber",
+        "canonical": "#8a5a12",
+        "tonalRamp": ["#2e1e06", "#523410", "#6d4610", "#8a5a12", "#b07c2c", "#cfa45e", "#e8cd9e", "#faf1e2"]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Defect Red",
+        "canonical": "#b3261e",
+        "tonalRamp": ["#3d0d0a", "#6b1712", "#8f1f18", "#b3261e", "#cf5a52", "#e08c86", "#f0c0bc", "#fbeceb"]
+      },
+      "derived": {
+        "role": "tertiary",
+        "displayName": "Derived Violet",
+        "canonical": "#6a4f9c",
+        "tonalRamp": ["#241a36", "#3d2d5c", "#523d78", "#6a4f9c", "#8a72b8", "#ab98d0", "#cdc0e4", "#f1edf8"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The h1 of a screen. Lora serif, one per page." },
+      "headline": { "displayName": "Headline", "purpose": "h2 section headings inside a card. Lora serif." },
+      "body": { "displayName": "Body", "purpose": "All prose and form text. Public Sans, fixed at 16px." },
+      "label": { "displayName": "Label", "purpose": "Uppercase micro-labels: summary strip, derived-data tag, verdicts." },
+      "arabic": { "displayName": "Arabic", "purpose": "Noto Naskh Arabic, applied by [dir='rtl']. Not a fallback." }
+    },
+    "shadows": [
+      {
+        "name": "raised",
+        "value": "0 1px 2px rgba(15, 23, 32, 0.04), 0 4px 14px rgba(15, 23, 32, 0.06)",
+        "purpose": "The only shadow in the system. Floating theme toggle, the confirmation dialog, and submission card hover/focus."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-change",
+        "value": "120ms ease",
+        "purpose": "Control hover, focus ring, and input border/background. The default for anything responding to pointer or focus."
+      },
+      {
+        "name": "magnitude-change",
+        "value": "300ms ease",
+        "purpose": "The comparison chart's bar height when the cohort filter changes."
+      }
+    ],
+    "breakpoints": [
+      { "name": "xs", "value": "26rem" },
+      { "name": "sm", "value": "30rem" },
+      { "name": "md", "value": "40rem" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single affirmative action on a screen. Its label carries its in-flight state.",
+      "html": "<button class=\"ds-btn-primary\">Begin assessment</button>",
+      "css": ".ds-btn-primary { font: inherit; font-weight: 600; padding: 0.65rem 1.2rem; color: #ffffff; background: var(--accent, #1e5c8c); border: 1px solid var(--accent, #1e5c8c); border-radius: 6px; cursor: pointer; transition: background 120ms ease; } .ds-btn-primary:hover:not(:disabled) { background: var(--accent-strong, #134369); } .ds-btn-primary:focus-visible { outline: 3px solid var(--accent, #1e5c8c); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Reversible or navigational actions: Previous/Next section, Show normalized text.",
+      "html": "<button class=\"ds-btn-secondary\">Next section</button>",
+      "css": ".ds-btn-secondary { font: inherit; font-weight: 600; padding: 0.65rem 1.2rem; color: var(--accent, #1e5c8c); background: var(--paper, #ffffff); border: 1px solid var(--line, #dde1e7); border-radius: 6px; cursor: pointer; transition: background 120ms ease; } .ds-btn-secondary:hover:not(:disabled) { background: var(--accent-soft, #e9f1f8); border-color: var(--accent-soft-strong, #d7e6f2); } .ds-btn-secondary:focus-visible { outline: 3px solid var(--accent, #1e5c8c); outline-offset: 2px; } .ds-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "The entry-page and login field. Focus lifts the background to Paper and adds a soft ring.",
+      "html": "<div class=\"ds-field\"><label for=\"ds-cohort\">Cohort code</label><input id=\"ds-cohort\" value=\"ENG-2026-A\" /><p class=\"ds-hint\">The access code given to your group</p></div>",
+      "css": ".ds-field label { display: block; font-weight: 600; font-size: 0.92rem; margin-bottom: 0.3rem; } .ds-field input { width: 100%; padding: 0.65rem 0.8rem; font: inherit; color: var(--ink, #16191d); background: var(--page, #f3f5f8); border: 1px solid var(--line, #dde1e7); border-radius: 6px; transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease; } .ds-field input:focus { outline: none; border-color: var(--accent, #1e5c8c); background: var(--paper, #ffffff); box-shadow: 0 0 0 3px var(--accent-soft, #e9f1f8); } .ds-field .ds-hint { color: var(--ink-soft, #565f6b); font-size: 0.9rem; margin: 0.35rem 0 0; }"
+    },
+    {
+      "name": "Invalid Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A field refused by validation. The message replaces the hint rather than stacking with it.",
+      "html": "<div class=\"ds-field ds-field-invalid\"><label for=\"ds-name\">Your name</label><input id=\"ds-name\" aria-invalid=\"true\" aria-describedby=\"ds-name-error\" /><p class=\"ds-field-error\" id=\"ds-name-error\">studentName must not be blank</p></div>",
+      "css": ".ds-field-invalid input { border-color: var(--danger, #b3261e); } .ds-field-error { color: var(--danger, #b3261e); font-size: 0.87rem; margin: 0.35rem 0 0; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The primary container. Separates by lightness on the surface ladder, never by shadow.",
+      "html": "<div class=\"ds-card\"><h2>Your report</h2><p>You have submitted this assessment, so your answers are final.</p></div>",
+      "css": ".ds-card { background: var(--paper, #ffffff); border: 1px solid var(--line, #dde1e7); border-radius: 10px; padding: 1.5rem; } .ds-card h2 { font-family: 'Lora', Georgia, serif; font-weight: 600; font-size: 1.2rem; margin: 0 0 0.75rem; } .ds-card p { color: var(--ink-soft, #565f6b); margin: 0; }"
+    },
+    {
+      "name": "Alert Notice",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "A refusal rendered above a form. Amber for information, red when promoted to role=alert.",
+      "html": "<div class=\"ds-notice\" role=\"alert\"><p>We couldn't find a matching record — check your details</p></div>",
+      "css": ".ds-notice { border: 1px solid var(--danger, #b3261e); background: var(--danger-soft, #fbeceb); border-radius: 10px; padding: 0.9rem 1.1rem; margin-bottom: 1.25rem; } .ds-notice p { margin: 0; color: var(--ink, #16191d); font-size: 0.92rem; }"
+    },
+    {
+      "name": "Staff Navigation Item",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "A sidebar row. The current item is driven by aria-current so visual and accessible state cannot drift.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item\" href=\"#\" aria-current=\"true\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"9\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"5\"/><rect x=\"14\" y=\"12\" width=\"7\" height=\"9\"/><rect x=\"3\" y=\"16\" width=\"7\" height=\"5\"/></svg>Dashboard</a><a class=\"ds-nav-item\" href=\"#\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M11 18H3\"/><path d=\"m15 18 2-2-2-2\"/><path d=\"M17 16H3\"/><path d=\"M3 6h18\"/><path d=\"M3 12h18\"/></svg>Submissions</a></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; width: 15.5rem; } .ds-nav-item { display: flex; align-items: center; gap: 0.65rem; padding: 0.55rem 0.7rem; border-radius: 6px; color: var(--ink-soft, #565f6b); font-size: 0.92rem; font-weight: 500; text-decoration: none; margin-bottom: 0.15rem; } .ds-nav-item:hover:not([aria-current='true']) { background: var(--surface-sunken, #eceef2); } .ds-nav-item[aria-current='true'] { background: var(--accent-soft-strong, #d7e6f2); color: var(--accent-strong, #134369); font-weight: 600; } .ds-nav-item:focus-visible { outline: 3px solid var(--accent, #1e5c8c); outline-offset: 2px; }"
+    },
+    {
+      "name": "Section Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Assessment section navigation. The current section inverts to a solid navy fill.",
+      "html": "<ul class=\"ds-chips\"><li><button aria-current=\"true\">Grammar</button></li><li><button>Vocabulary</button></li><li><button>Reading</button></li></ul>",
+      "css": ".ds-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; padding: 0; list-style: none; } .ds-chips button { font: inherit; font-weight: 500; font-size: 0.88rem; padding: 0.45rem 0.9rem; color: var(--ink-soft, #565f6b); background: var(--page, #f3f5f8); border: 1px solid var(--line, #dde1e7); border-radius: 999px; cursor: pointer; } .ds-chips button:hover:not([aria-current='true']) { background: var(--accent-soft, #e9f1f8); color: var(--accent-strong, #134369); border-color: var(--accent-soft-strong, #d7e6f2); } .ds-chips button[aria-current='true'] { color: #ffffff; background: var(--accent, #1e5c8c); border-color: var(--accent, #1e5c8c); } .ds-chips button:focus-visible { outline: 3px solid var(--accent, #1e5c8c); outline-offset: 2px; }"
+    },
+    {
+      "name": "Submission Card",
+      "kind": "card",
+      "refersTo": "submission-card",
+      "description": "A whole card that is itself the link — one focusable target, openable in a new tab.",
+      "html": "<a class=\"ds-submission-card\" href=\"#\"><p class=\"ds-submission-name\">Student Name</p><p class=\"ds-submission-meta\">Roll 20210001 · Submitted 19/09/2026</p><span class=\"ds-submission-status\">Submitted</span></a>",
+      "css": ".ds-submission-card { display: block; background: var(--paper, #ffffff); border: 1px solid var(--line, #dde1e7); border-radius: 10px; padding: 1.1rem 1.25rem; text-decoration: none; color: inherit; transition: box-shadow 120ms ease, border-color 120ms ease; } .ds-submission-card:hover, .ds-submission-card:focus-visible { box-shadow: 0 1px 2px rgba(15,23,32,0.04), 0 4px 14px rgba(15,23,32,0.06); border-color: var(--accent-soft-strong, #d7e6f2); } .ds-submission-name { font-weight: 600; margin: 0 0 0.15rem; color: var(--ink, #16191d); } .ds-submission-meta { color: var(--ink-faint, #8892a0); font-size: 0.8rem; margin: 0 0 0.8rem; } .ds-submission-status { display: inline-flex; align-items: center; font-size: 0.78rem; font-weight: 600; padding: 0.15rem 0.65rem; border-radius: 999px; background: var(--success-soft, #e9f6ee); color: var(--success, #2b7a53); }"
+    },
+    {
+      "name": "Save Status Indicator",
+      "kind": "custom",
+      "refersTo": "chip",
+      "description": "The system's model for async feedback: four text states, no spinner, reserved height, and a failure line that says what is still true.",
+      "html": "<div class=\"ds-save-states\"><p class=\"ds-save-status\">Saving…</p><p class=\"ds-save-status ds-save-status-saved\">Saved</p><p class=\"ds-save-status ds-save-status-error\">We could not save your last changes — check your connection. Your earlier answers are safe.</p></div>",
+      "css": ".ds-save-states { display: flex; flex-direction: column; gap: 0.4rem; } .ds-save-status { font-size: 0.85rem; color: var(--ink-soft, #565f6b); min-height: 1.4em; display: flex; align-items: center; gap: 0.4rem; margin: 0; } .ds-save-status-saved { color: var(--success, #2b7a53); } .ds-save-status-saved::before { content: '\\25CF'; font-size: 0.55rem; color: var(--success, #2b7a53); } .ds-save-status-error { color: var(--danger, #b3261e); font-weight: 600; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Examination Hall",
+    "overview": "Lexora is an instrument, not a destination. A student arrives once, under some pressure, to do something they cannot redo, and the interface's job is to get out of the way. That is why the surface is cool and near-monochrome, why there is exactly one accent hue, and why nothing on the student's path moves unless it is reporting a state change. The restraint is not timidity — it is the design. A screen that competes for attention is a screen that costs a student attention they need for the questions.\n\nThe second influence is documentary rather than commercial. Headings are set in a serif (Lora) while everything functional is set in Public Sans, so a screen reads as a university document rather than a web app — the same instinct that puts the report's band descriptions in prose rather than a chart. The palette is a cool blue-grey built from a paper-and-ink pair, with a single desaturated navy carrying every interactive and emphasis role.\n\nDepth is communicated by tone and hairline borders, not by shadow. Surfaces are a three-step ladder — page, paper, sunken — and a card is legible because it is lighter than what it sits on, not because it floats. There is one shadow token in the whole system, and it is reserved for surfaces that genuinely overlap other content.",
+    "keyCharacteristics": [
+      "Calm, credible, unhurried; the interface recedes behind the task.",
+      "One accent hue; colour is functional and rare, never decorative.",
+      "Serif headings over a sans body — documentary, not commercial.",
+      "Tonal layering and hairline borders instead of shadow and elevation.",
+      "A single reserved hue for non-scoring and AI-derived content.",
+      "Motion is reserved for state change; the system currently has almost none."
+    ],
+    "rules": [
+      {
+        "name": "The Reserved Hue Rule",
+        "body": "--ai / --ai-soft mark content that is AI-derived, non-scoring, or research-only, and nothing else, ever. If it ever appears beside a number that counts toward an English score, that is a bug — the hue exists so a student can tell \"this is not a result\" without reading.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Accent Rule",
+        "body": "There is one interactive hue. New features do not get their own colour; they get the accent, or a reserved semantic hue, or ink. The palette has no room for a fifth expressive colour and does not want one.",
+        "section": "colors"
+      },
+      {
+        "name": "The Never-For-A-Score Rule",
+        "body": "Green and red carry status (submitted, saved, incorrect) and never carry magnitude. No score, mean, band, or bar is coloured by how good or bad it is — the sole exception is the weakest-topics severity ramp, a deliberate four-step scale.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Families, Three Jobs Rule",
+        "body": "Lora is for h1 and h2 only. Public Sans is for everything else, including h3. If a third family is ever proposed, the answer is no.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Any number that appears in a column, a chart label, a metric row, or a bar is set with font-variant-numeric: tabular-nums. Numbers that do not align are numbers that cannot be compared.",
+        "section": "typography"
+      },
+      {
+        "name": "The Arabic Is Not A Fallback Rule",
+        "body": "[dir='rtl'] switches the typeface to Noto Naskh Arabic and flips alignment and border side. Naskh is the correct face for Arabic prose, not a substitute for a missing glyph.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "Surfaces are flat at rest. A shadow appears only where content actually floats above other content, or as a response to pointer/focus state. A new shadow token is a design decision, not a styling convenience.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Ladder Rule",
+        "body": "Never place a darker surface on top of a lighter one. Paper on page, sunken inside paper. Inverting the ladder is the fastest way to make this system look broken, in either theme.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep one interactive hue. New controls take --accent, a reserved semantic hue, or ink.",
+      "Do use the surface ladder — Sunken → Page → Paper — to separate regions, and reach for --shadow-raised only when content genuinely overlaps other content.",
+      "Do set every comparable number in font-variant-numeric: tabular-nums.",
+      "Do express selection through aria-current / aria-pressed and style from that attribute, so the visual and accessible states cannot diverge.",
+      "Do reserve --ai / --ai-soft for AI-derived, non-scoring, and research-only content.",
+      "Do say \"None.\" rather than rendering an empty heading — an absent list must be distinguishable from a list that failed to load.",
+      "Do let a button's label carry its in-flight state (\"Submitting…\") instead of adding a spinner.",
+      "Do label anything the model produced as derived, in a visually distinct container, not merely with a caption a reader can skim past."
+    ],
+    "donts": [
+      "Don't make the product competitive. No leaderboards, no ranking of students against each other, no streaks, no badges, no comparative language. The weakest-topics panel ranks topics, and that is the only ranking in the product.",
+      "Don't imply a result that has not been computed. No placeholder score, no 0 where a value is missing (a — is not a zero), no mean of an empty set.",
+      "Don't present AI-derived categories, normalised text, or interpretations as the student's own words, or as diagnostic.",
+      "Don't add a charting or component library. Charts are hand-drawn from tokens.",
+      "Don't put h3 in Lora — the serif is for h1 and h2 only.",
+      "Don't introduce a new radius, a new shadow, or a fourth surface step without changing DESIGN.md.",
+      "Don't change the analysis, the aggregation rules, or the scoring to serve a visual idea. The dashboard may present differently; it may not compute differently."
+    ]
+  }
+}

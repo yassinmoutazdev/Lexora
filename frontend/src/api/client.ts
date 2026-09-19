@@ -36,13 +36,100 @@ export type ApiFieldIssue = {
 export class ApiError extends Error {
   readonly status: number;
   readonly details: ApiFieldIssue[];
+  /**
+   * The parsed response body, when the API sent one.
+   *
+   * Section 11 gives every refusal the same envelope — `{ error, details? }` — and for almost every
+   * refusal that envelope is the whole story, which is why `message` and `details` are lifted out.
+   * One endpoint says more: a submit refused for completeness returns `incompleteSections` beside
+   * the message, naming the sections the server believes are unfinished. That is the most useful
+   * thing the response carries, and it is a list of section keys rather than a message, so it fits
+   * neither `message` nor `details`.
+   *
+   * Keeping the body is what stops that detail being thrown away at the API boundary. It is
+   * deliberately untyped: the type of a body nobody has parsed yet is not knowable, and a call site
+   * that wants a specific field has to check for it — which is the correct amount of ceremony for a
+   * field one endpoint returns.
+   */
+  readonly body: unknown;
 
-  constructor(message: string, status: number, details: ApiFieldIssue[] = []) {
+  /**
+   * How long the server asked the caller to wait, in seconds, when it refused with a `429`.
+   *
+   * The rate limiter sets `Retry-After`, and Section 11's refusal says only "please try again
+   * later". Without reading the header, the page can repeat that sentence and nothing more — so the
+   * same words stand for a thirty-second wait and a fifteen-minute one, and a student locked out of
+   * the entry form has no way to know whether to keep trying or go away and come back.
+   */
+  readonly retryAfterSeconds: number | undefined;
+
+  constructor(
+    message: string,
+    status: number,
+    details: ApiFieldIssue[] = [],
+    body?: unknown,
+    retryAfterSeconds?: number,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.details = details;
+    this.body = body;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
+}
+
+/**
+ * A wait, in seconds, as a phrase a person would say.
+ *
+ * Rounded up to the next minute rather than truncated: the header is a countdown and it is read a
+ * moment after it was sent, so "1 minute" for 61 seconds is a promise the page can keep, where "1
+ * minute" for 119 is not. Seconds are named exactly, because under a minute the difference between
+ * twenty and forty is worth knowing.
+ */
+export function describeWait(seconds: number): string {
+  if (seconds < 60) return `${seconds} second${seconds === 1 ? '' : 's'}`;
+
+  const minutes = Math.ceil(seconds / 60);
+
+  return `about ${minutes} minute${minutes === 1 ? '' : 's'}`;
+}
+
+/**
+ * A refusal as a sentence to show, with the wait spelled out when the server named one.
+ *
+ * Section 11 makes the API responsible for the wording of every refusal it can foresee, and this
+ * does not replace that wording — it appends to it, and only for the one refusal the server cannot
+ * fully word. A rate-limit message is written once, while the duration it belongs to differs every
+ * time and arrives in a header; "please try again later" is the same sentence whether the wait is
+ * thirty seconds or fifteen minutes, and the student deciding whether to keep trying is the person
+ * who needs the difference.
+ *
+ * Lives here rather than in either page because both entry points face the same `429`, and the
+ * composed sentence is part of this module's vocabulary — `FALLBACK_MESSAGES` above already owns
+ * the user-facing strings for the failures the API cannot word itself.
+ */
+export function describeRefusal(error: ApiError): string {
+  if (error.retryAfterSeconds === undefined) return error.message;
+
+  return `${error.message} You can try again in ${describeWait(error.retryAfterSeconds)}.`;
+}
+
+/**
+ * The `Retry-After` the server set, if it set a usable one.
+ *
+ * Read defensively, like every other header this client reads: it may be absent, or carry an HTTP
+ * date rather than a number of seconds — the header permits both, and this server sends seconds. A
+ * value that is not a positive whole number of seconds is treated as "the server did not say"
+ * rather than as a failure, because a refusal with no wait attached is still worth showing.
+ */
+function retryAfterFrom(response: Response): number | undefined {
+  const header = response.headers.get('retry-after');
+  if (header === null) return undefined;
+
+  const seconds = Number(header);
+
+  return Number.isSafeInteger(seconds) && seconds > 0 ? seconds : undefined;
 }
 
 /**
@@ -127,7 +214,13 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
 
   if (!response.ok) {
     const { message, details } = readErrorBody(body);
-    throw new ApiError(message ?? fallbackMessage(response.status), response.status, details);
+    throw new ApiError(
+      message ?? fallbackMessage(response.status),
+      response.status,
+      details,
+      body,
+      retryAfterFrom(response),
+    );
   }
 
   return body as T;
@@ -229,6 +322,21 @@ export async function staffLogin(credentials: StaffCredentials): Promise<void> {
 }
 
 /**
+ * Ends the staff session (Section 10, Section 13).
+ *
+ * The endpoint has existed since T3.3.2 and was tested from the start; nothing called it, so the
+ * staff shell had no way to end an eight-hour session. This is the call the sign-out control makes.
+ *
+ * A `401` is not treated specially here. `requireStaffSession` refuses a caller who is not logged
+ * in, which for a sign-out means the session is already gone — the caller's intent is satisfied
+ * either way, and the control navigates to the login form on both outcomes rather than making the
+ * person distinguish "signed out" from "already signed out".
+ */
+export async function staffLogout(): Promise<void> {
+  await requestJson<{ ok: true }>('/api/staff/logout', { method: 'POST' });
+}
+
+/**
  * The dashboard's aggregate metrics (Section 10, FR-STAFF-004–009).
  *
  * `cohortId` is omitted rather than sent empty for "all cohorts", because that is what the server
@@ -307,13 +415,55 @@ export async function downloadStaffExportCsv(
     }
 
     const { message, details } = readErrorBody(body);
-    throw new ApiError(message ?? fallbackMessage(response.status), response.status, details);
+    throw new ApiError(message ?? fallbackMessage(response.status), response.status, details, body);
+  }
+
+  const blob = await response.blob();
+  const expected = contentLengthFrom(response);
+
+  /*
+    A download that stopped early used to be indistinguishable from one that finished.
+
+    The server now states the exact byte length, so the two can be told apart: a body shorter than
+    its own `Content-Length` is a connection that died, and the reply is a refusal rather than a
+    file. Without this the staff member saved a silently truncated CSV — the one outcome this screen
+    exists to prevent — and the page reported success.
+
+    Skipped when the response is content-encoded, because `Content-Length` then measures the
+    compressed bytes while `blob.size` measures the decoded ones, and the two disagree for reasons
+    that have nothing to do with truncation. Nothing in this stack compresses the export today; the
+    guard is here so that a proxy which starts to cannot turn a good download into an error.
+  */
+  const encoding = response.headers.get('content-encoding');
+
+  if (expected !== undefined && (encoding === null || encoding === 'identity') && blob.size !== expected) {
+    throw new ApiError(
+      'The download did not finish, so the file would have been incomplete. Please try again.',
+      response.status,
+    );
   }
 
   return {
-    blob: await response.blob(),
+    blob,
     filename: filenameFrom(response) ?? 'lexora-submissions.csv',
   };
+}
+
+/**
+ * The `Content-Length` the server stated, if it stated a usable one.
+ *
+ * Read defensively for the same reason `filenameFrom` is: the header is a string this code did not
+ * compose, and a proxy may have rewritten it, dropped it, or sent something that is not a number. A
+ * missing or unparseable value returns `undefined`, which the caller treats as "cannot check" rather
+ * than as "failed" — an unverifiable download is still worth delivering.
+ */
+function contentLengthFrom(response: Response): number | undefined {
+  const header = response.headers.get('content-length');
+  if (header === null) return undefined;
+
+  const length = Number(header);
+
+  return Number.isSafeInteger(length) && length >= 0 ? length : undefined;
 }
 
 /**

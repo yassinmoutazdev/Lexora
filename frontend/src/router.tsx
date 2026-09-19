@@ -42,6 +42,21 @@ export function navigate(to: string, options: { replace?: boolean } = {}): void 
     window.history.pushState(null, '', to);
   }
 
+  /*
+    A new route starts at its top.
+
+    Without this the window keeps whatever offset the page being left had reached, so a submission
+    opened from the bottom of the dashboard lands part-way down the record, and a report opened from
+    a scrolled assessment lands part-way down the report. The content is right and the position is
+    wrong, which reads as a page that failed to load properly rather than as a navigation.
+
+    Back and forward deliberately do not come through here: they arrive as `popstate`, and the
+    browser's own scroll restoration is left to handle them (`scrollRestoration` stays at its
+    default of `auto`). Resetting to the top on a back button would be the opposite bug — it would
+    throw away the position the reader was returning to.
+  */
+  window.scrollTo(0, 0);
+
   window.dispatchEvent(new Event(NAVIGATION_EVENT));
 }
 

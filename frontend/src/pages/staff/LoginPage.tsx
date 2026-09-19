@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { ApiError, staffLogin } from '../../api/client';
+import { ApiError, describeRefusal, staffLogin } from '../../api/client';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { Link, navigate } from '../../router';
 
@@ -35,8 +35,14 @@ import { Link, navigate } from '../../router';
 /** One login field, so reading and clearing the two does not repeat their names. */
 type FieldName = 'email' | 'password';
 
-const FIELDS: { name: FieldName; label: string; type: string; autoComplete: string }[] = [
-  { name: 'email', label: 'Email', type: 'email', autoComplete: 'username' },
+const FIELDS: {
+  name: FieldName;
+  label: string;
+  type: string;
+  autoComplete: string;
+  first?: boolean;
+}[] = [
+  { name: 'email', label: 'Email', type: 'email', autoComplete: 'username', first: true },
   { name: 'password', label: 'Password', type: 'password', autoComplete: 'current-password' },
 ];
 
@@ -52,6 +58,11 @@ export function LoginPage() {
   const [fieldIssues, setFieldIssues] = useState<FieldIssues>({});
   const [refusal, setRefusal] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  /** The notice, so a credential refusal can be moved to rather than only announced. */
+  const notice = useRef<HTMLDivElement>(null);
+  /** The form, so a validation refusal can find the field it belongs to. */
+  const form = useRef<HTMLFormElement>(null);
 
   function update(name: FieldName, value: string) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -81,7 +92,7 @@ export function LoginPage() {
           Object.fromEntries(error.details.map((issue) => [issue.field, issue.message])),
         );
       } else if (error instanceof ApiError) {
-        setRefusal(error.message);
+        setRefusal(describeRefusal(error));
       } else {
         // Nothing on this page should throw anything else; if something does, the person still
         // gets a sentence rather than a blank screen.
@@ -89,6 +100,25 @@ export function LoginPage() {
       }
 
       setSubmitting(false);
+
+      /*
+        Move the reader to the refusal, for the reason `EntryPage` records: the notice renders above
+        the form while focus stays on the submit button below it.
+
+        The generic credential refusal has no field to belong to — Section 13 requires that it name
+        neither — so focus goes to the notice. That is also why the notice is focusable at all: it is
+        the only place the message exists.
+      */
+      window.requestAnimationFrame(() => {
+        const firstInvalid = form.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]');
+
+        if (firstInvalid) {
+          firstInvalid.focus();
+          return;
+        }
+
+        notice.current?.focus();
+      });
     }
   }
 
@@ -100,12 +130,13 @@ export function LoginPage() {
         <p className="lede">Sign in to view assessment results and export the pilot data.</p>
 
         {refusal !== null && (
-          <div className="notice" role="alert">
+          // `tabIndex={-1}` so the credential refusal, which belongs to no field, can be focused.
+          <div className="notice" role="alert" ref={notice} tabIndex={-1}>
             <p>{refusal}</p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleSubmit} noValidate ref={form} aria-busy={submitting}>
           {FIELDS.map((field) => {
             const issue = fieldIssues[field.name];
 
@@ -120,6 +151,7 @@ export function LoginPage() {
                   onChange={(event) => update(field.name, event.target.value)}
                   aria-describedby={issue ? `${field.name}-error` : undefined}
                   aria-invalid={issue ? true : undefined}
+                  autoFocus={field.first}
                   autoComplete={field.autoComplete}
                   autoCapitalize="none"
                   autoCorrect="off"

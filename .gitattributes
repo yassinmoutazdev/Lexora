@@ -1,0 +1,24 @@
+# Line endings
+# ============================================================================
+# Every text file is LF, in the working tree and in the repository.
+#
+# Nothing was pinning this before, so the endings a file had were whatever the
+# last tool to touch it decided. On Windows that meant an edit could silently
+# rewrite an entire file with CRLF while changing three lines of it — and the
+# result is not a cosmetic problem. Twice during the UX pass a whole file
+# showed as rewritten: a thirty-two line test addition appeared inside a
+# 1010-line diff, and a fifty-line route change inside an 825-line one. A
+# reviewer reading that diff cannot find the change, and neither can `git log
+# -p` or `git blame` afterwards.
+#
+# `text=auto` lets git decide per file whether something is text, so this needs
+# no binary rules — a PNG added later is detected and left alone rather than
+# being corrupted by a newline translation.
+#
+# `eol=lf` sets the working tree to LF as well as the repository. Without it a
+# Windows checkout would still get CRLF, and the next edit would reintroduce
+# exactly the problem this file exists to prevent.
+#
+# The repository was already entirely LF when this was added, so nothing is
+# renormalized by it — it only stops a future edit from breaking that.
+* text=auto eol=lf

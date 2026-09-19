@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { ApiError, verifyStudentIdentity } from '../../api/client';
+import { ApiError, describeRefusal, verifyStudentIdentity } from '../../api/client';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { Link, navigate } from '../../router';
 
@@ -31,8 +31,21 @@ import { Link, navigate } from '../../router';
 /** One entry-page field, so resetting and reading issues does not repeat the field names. */
 type FieldName = 'cohortCode' | 'rollNumber' | 'studentName';
 
-const FIELDS: { name: FieldName; label: string; hint?: string; autoComplete?: string }[] = [
-  { name: 'cohortCode', label: 'Cohort code', hint: 'The access code given to your group' },
+/**
+ * The fields, in the order they are asked.
+ *
+ * `first` marks the one the cursor starts in. The page has exactly one purpose and one field to
+ * start with, so on a phone — where this form is most often filled in — landing in the field saves
+ * a tap that has no decision behind it.
+ */
+const FIELDS: {
+  name: FieldName;
+  label: string;
+  hint?: string;
+  autoComplete?: string;
+  first?: boolean;
+}[] = [
+  { name: 'cohortCode', label: 'Cohort code', hint: 'The access code given to your group', first: true },
   { name: 'rollNumber', label: 'University roll number' },
   { name: 'studentName', label: 'Your name', hint: 'As it appears on your university record' },
 ];
@@ -49,6 +62,11 @@ export function EntryPage() {
   const [fieldIssues, setFieldIssues] = useState<FieldIssues>({});
   const [refusal, setRefusal] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  /** The notice, so a refusal can be moved to rather than only announced. */
+  const notice = useRef<HTMLDivElement>(null);
+  /** The form, so a validation refusal can find the field it belongs to. */
+  const form = useRef<HTMLFormElement>(null);
 
   function update(name: FieldName, value: string) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -81,7 +99,7 @@ export function EntryPage() {
           Object.fromEntries(error.details.map((issue) => [issue.field, issue.message])),
         );
       } else if (error instanceof ApiError) {
-        setRefusal(error.message);
+        setRefusal(describeRefusal(error));
       } else {
         // Nothing in this page should throw anything else; if something does, the student still
         // gets a sentence rather than a blank screen.
@@ -89,6 +107,29 @@ export function EntryPage() {
       }
 
       setSubmitting(false);
+
+      /*
+        Move the reader to the refusal.
+
+        `role="alert"` announces it, and that is enough for a screen reader — but the notice renders
+        above the form while focus stays on the submit button at the bottom, so a keyboard user has
+        to reverse-tab back up to reach the message they were just told about. A validation refusal
+        goes to the field it is about; an identity refusal has no field to belong to, so it goes to
+        the notice itself.
+
+        Deferred a frame because both of those elements are rendered by the state updates above, and
+        the one to focus does not exist until React has committed them.
+      */
+      window.requestAnimationFrame(() => {
+        const firstInvalid = form.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]');
+
+        if (firstInvalid) {
+          firstInvalid.focus();
+          return;
+        }
+
+        notice.current?.focus();
+      });
     }
   }
 
@@ -103,12 +144,14 @@ export function EntryPage() {
         </p>
 
         {refusal !== null && (
-          <div className="notice" role="alert">
+          // `tabIndex={-1}` so a refusal with no field to belong to can be focused and read from.
+          <div className="notice" role="alert" ref={notice} tabIndex={-1}>
             <p>{refusal}</p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} noValidate>
+        {/* `aria-busy` says the form is working, which the disabled controls alone only imply. */}
+        <form onSubmit={handleSubmit} noValidate ref={form} aria-busy={submitting}>
           {FIELDS.map((field) => {
             const issue = fieldIssues[field.name];
 
@@ -122,6 +165,7 @@ export function EntryPage() {
                   onChange={(event) => update(field.name, event.target.value)}
                   aria-describedby={issue ? `${field.name}-error` : undefined}
                   aria-invalid={issue ? true : undefined}
+                  autoFocus={field.first}
                   autoComplete="off"
                   autoCapitalize="none"
                   autoCorrect="off"

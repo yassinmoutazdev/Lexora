@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { StaffSubmissionDetail } from '../../../../src/shared/types/staff';
 import type { ProcessingStatus } from '../../../../src/shared/types/sections';
 import { ApiError, getStaffSubmissionDetail } from '../../api/client';
+import { SkeletonCard, SkeletonStatus } from '../../components/Skeleton';
 import { StaffLayout } from '../../components/StaffLayout';
 import { Link, navigate } from '../../router';
 
@@ -38,6 +39,8 @@ import { Link, navigate } from '../../router';
 export function SubmissionDetailPage({ submissionId }: { submissionId: string }) {
   const [submission, setSubmission] = useState<StaffSubmissionDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** Whether the refusal was a 404, which is a different situation from a load that merely failed. */
+  const [missing, setMissing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +60,7 @@ export function SubmissionDetailPage({ submissionId }: { submissionId: string })
           return;
         }
 
+        setMissing(error instanceof ApiError && error.status === 404);
         setLoadError(error instanceof ApiError ? error.message : 'Something went wrong');
       });
 
@@ -67,27 +71,51 @@ export function SubmissionDetailPage({ submissionId }: { submissionId: string })
     };
   }, [submissionId]);
 
+  // Inside the shell, so a failure here does not also remove the navigation the reader needs to get
+  // somewhere that works. See `DashboardPage` for the full note.
   if (loadError !== null) {
     return (
-      <main className="page">
+      <StaffLayout activeItem="submissions" title="Submission">
         <div className="card">
-          <h1>We could not load that submission</h1>
+          <h2>{missing ? 'That submission does not exist' : 'We could not load that submission'}</h2>
           <div className="notice" role="alert">
             <p>{loadError}</p>
           </div>
-          <Link to="/staff/dashboard">Back to the dashboard</Link>
+
+          {/*
+            A 404 and a transient failure are different problems and used to read identically.
+
+            "No such submission" covers a mistyped id, a stale bookmark, and a record that is
+            genuinely gone, and it offers no way to tell them apart. What a staff member can act on
+            is the difference between "this link is wrong" — where the list is the answer — and
+            "this did not load", where reloading is.
+          */}
+          <p className="hint">
+            {missing
+              ? 'The link may be out of date, or the address may have been mistyped. The submissions list shows every record that exists.'
+              : 'Your session is still active, and nothing has been lost. Reloading usually fixes this.'}
+          </p>
+
+          <div className="button-row">
+            {!missing && (
+              <button type="button" onClick={() => window.location.reload()}>
+                Reload
+              </button>
+            )}
+            <Link to="/staff/submissions">Back to submissions</Link>
+          </div>
         </div>
-      </main>
+      </StaffLayout>
     );
   }
 
   if (!submission) {
     return (
-      <main className="page">
-        <div className="card">
-          <p className="lede">Loading submission…</p>
-        </div>
-      </main>
+      <StaffLayout activeItem="submissions" title="Submission">
+        <SkeletonStatus label="Loading the submission" />
+        <SkeletonCard lines={3} />
+        <SkeletonCard lines={4} />
+      </StaffLayout>
     );
   }
 
