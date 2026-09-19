@@ -88,6 +88,13 @@ export type DifficultyInputRow = {
   reading: unknown;
 };
 
+/** One evaluated writing response's per-criterion scores, for the writing-by-criterion breakdown. */
+export type WritingCriteriaRow = {
+  contentVersion: string;
+  /** `writingCriteriaScores` as stored: `{ [criterionKey]: { score, rationale } }`. */
+  criteriaScores: unknown;
+};
+
 /** One submission as the dashboard's list shows it. */
 export type RecentSubmissionRow = {
   id: string;
@@ -306,6 +313,29 @@ export class DashboardRepository {
              s."answers" -> 'reading'    AS "reading"
         FROM "Submission" s
        WHERE s."status" = 'submitted' ${cohortPredicate(filter)}
+    `;
+  }
+
+  /**
+   * Per-criterion writing scores for evaluated submissions, for the writing-by-criterion breakdown
+   * (a dashboard extension of FR-STAFF-006/012 — see `DashboardService.buildWritingCriteria`).
+   *
+   * Restricted to `writingStatus = 'succeeded'`: a criterion score only exists once evaluation has
+   * finished, and `not_applicable`/`pending`/`processing`/`failed_needs_review` rows carry no
+   * `writingCriteriaScores` to average. The service does not have to filter these out itself — the
+   * same "only count what actually has the field" rule `difficultyInputs` leaves to `DashboardService`
+   * for choice answers is enforced here in SQL instead, because unlike a choice answer, a row with no
+   * evaluation is not an input to *re-score* — it is simply not a row this aggregate is about.
+   */
+  async writingCriteriaScores(filter: DashboardFilter): Promise<WritingCriteriaRow[]> {
+    return getPrismaClient().$queryRaw<WritingCriteriaRow[]>`
+      SELECT s."contentVersion"         AS "contentVersion",
+             s."writingCriteriaScores"  AS "criteriaScores"
+        FROM "Submission" s
+       WHERE s."status" = 'submitted'
+         AND s."writingStatus" = 'succeeded'
+         AND s."writingCriteriaScores" IS NOT NULL
+         ${cohortPredicate(filter)}
     `;
   }
 }

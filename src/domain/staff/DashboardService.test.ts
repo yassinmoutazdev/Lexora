@@ -758,3 +758,162 @@ describe('DashboardService — difficulty comparison is conditional (FR-STAFF-00
     expect(loader.getContent('approved').grammar.questions).toHaveLength(9);
   });
 });
+
+describe('DashboardService — weakest topics', () => {
+  it('leaves out a topic with fewer responses than MIN_RESPONSES_PER_TOPIC', async () => {
+    const cohort = await createCohort();
+
+    // Real, provisional v1 content — unlike the difficulty comparison, this panel is not gated on
+    // content approval (see `TopicAggregate`'s doc comment), so a single submission is enough to
+    // reach the response-count gate on its own terms.
+    await createSubmission(cohort.id, {
+      status: 'submitted',
+      contentVersion: 'v1',
+      answers: { grammar: answersFor(getContentLoader(), 'v1', 'grammar', 'wrong') },
+      grammarScore: 0,
+    });
+
+    const payload = await dashboard(cohort.id);
+
+    // Every Grammar skill in v1 has exactly one question, so one submission gives every skill
+    // exactly one response — below MIN_RESPONSES_PER_TOPIC (5). The panel should report nothing
+    // rather than a ranked list built on n=1.
+    expect(payload.weakestTopics).toEqual([]);
+  });
+
+  it('ranks qualifying topics worst-first once enough students have answered them', async () => {
+    const cohort = await createCohort();
+    const loader = getContentLoader();
+
+    // Five submissions: the 'Articles' question (grammar-002) answered correctly by only one of
+    // them, so its accuracy (20%) should be worse — and rank first — against every other question,
+    // which all five submissions answer correctly.
+    //
+    // Every deterministic section is answered, not just Grammar. The aggregate re-scores whatever
+    // the submission holds, and `scoreDeterministicSections` counts a question with no answer as
+    // incorrect — so a Grammar-only fixture would hand Vocabulary and Reading every one of their
+    // topics a 0% accuracy and rank those above 'Articles'. A real submitted submission always has
+    // all three sections complete (FR-ASSESS-007), so answering them is also the realistic fixture.
+    const baseAnswers = {
+      grammar: answersFor(loader, 'v1', 'grammar', 'correct'),
+      vocabulary: answersFor(loader, 'v1', 'vocabulary', 'correct'),
+      reading: answersFor(loader, 'v1', 'reading', 'correct'),
+    };
+
+    for (let index = 0; index < 5; index += 1) {
+      const grammar = { ...baseAnswers.grammar };
+
+      if (index > 0) {
+        const articlesQuestion = questionsOf(loader, 'v1', 'grammar').find(
+          (question: any) => question.skill === 'Articles',
+        );
+        const wrongOption = articlesQuestion.options.find(
+          (option: any) => option.id !== articlesQuestion.correctAnswer,
+        );
+        grammar[articlesQuestion.id] = wrongOption.id;
+      }
+
+      await createSubmission(cohort.id, {
+        status: 'submitted',
+        contentVersion: 'v1',
+        answers: { ...baseAnswers, grammar },
+        grammarScore: index === 0 ? 9 : 8,
+      });
+    }
+
+    const payload = await dashboard(cohort.id);
+
+    expect(payload.weakestTopics[0]).toEqual({
+      skill: 'Articles',
+      section: 'grammar',
+      sectionTitle: 'Grammar',
+      responses: 5,
+      correct: 1,
+      accuracyPercent: 20,
+    });
+
+    // Worst-first: nothing else in this fixture should outrank 20%.
+    for (const topic of payload.weakestTopics.slice(1)) {
+      expect(topic.accuracyPercent).toBeGreaterThanOrEqual(20);
+    }
+
+    // Capped at WEAKEST_TOPICS_LIMIT (5).
+    expect(payload.weakestTopics.length).toBeLessThanOrEqual(5);
+  });
+});
+
+describe('DashboardService — writing scores by rubric criterion', () => {
+  it('reports every rubric criterion, even ones no evaluated submission scored', async () => {
+    const cohort = await createCohort();
+
+    await createSubmission(cohort.id, {
+      status: 'submitted',
+      contentVersion: 'v1',
+      writingStatus: 'succeeded',
+      writingOverallScore: 70,
+      writingCriteriaScores: {
+        grammarAccuracy: { score: 80, rationale: 'Solid control of tense and agreement.' },
+        // Every other criterion deliberately omitted, as a truncated evaluation would — the
+        // breakdown must still list all five, at 0 responses for the rest, rather than silently
+        // dropping columns the rubric defines.
+      },
+    });
+
+    const payload = await dashboard(cohort.id);
+    const byKey = Object.fromEntries(payload.writingCriteria.map((c) => [c.key, c]));
+
+    expect(byKey.grammarAccuracy).toEqual({
+      key: 'grammarAccuracy',
+      label: 'Grammar accuracy',
+      meanScore: 80,
+      responses: 1,
+    });
+    expect(byKey.vocabulary).toEqual({
+      key: 'vocabulary',
+      label: 'Vocabulary',
+      meanScore: 0,
+      responses: 0,
+    });
+    expect(payload.writingCriteria).toHaveLength(5);
+  });
+
+  it('ignores drafts and unevaluated writing when computing the mean', async () => {
+    const cohort = await createCohort();
+
+    await createSubmission(cohort.id, {
+      status: 'submitted',
+      contentVersion: 'v1',
+      writingStatus: 'succeeded',
+      writingCriteriaScores: { coherence: { score: 40, rationale: 'x' } },
+    });
+    await createSubmission(cohort.id, {
+      status: 'submitted',
+      contentVersion: 'v1',
+      writingStatus: 'pending',
+      // No writingCriteriaScores yet — this row must not be counted as a zero.
+    });
+    await createSubmission(cohort.id, { status: 'draft', contentVersion: 'v1' });
+
+    const payload = await dashboard(cohort.id);
+    const coherence = payload.writingCriteria.find((c) => c.key === 'coherence');
+
+    expect(coherence).toEqual({
+      key: 'coherence',
+      label: 'Coherence and organization',
+      meanScore: 40,
+      responses: 1,
+    });
+  });
+
+  it('reports an empty breakdown, not zeroed criteria, when nothing has been evaluated', async () => {
+    const cohort = await createCohort();
+    await createSubmission(cohort.id, { status: 'draft', contentVersion: 'v1' });
+
+    const payload = await dashboard(cohort.id);
+
+    // Still every criterion, from the current content's rubric — just every mean at 0/0 responses,
+    // which the page reads as "nothing yet" rather than "everyone scored zero".
+    expect(payload.writingCriteria).toHaveLength(5);
+    expect(payload.writingCriteria.every((c) => c.responses === 0)).toBe(true);
+  });
+});

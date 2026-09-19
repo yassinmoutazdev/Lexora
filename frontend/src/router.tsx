@@ -4,7 +4,9 @@ import type { AnchorHTMLAttributes } from 'react';
 /**
  * The application's routing, by hand and on purpose.
  *
- * ARCHITECTURE Section 9 fixes the route table at seven paths and Section 2's dependency list
+ * ARCHITECTURE Section 9 fixes the route table (eight paths, after `/staff/submissions` was added to
+ * give the staff sidebar's second item a destination — see that section's amendment note) and
+ * Section 2's dependency list
  * contains no router package, so there is nothing here to install. What routing this SPA actually
  * needs is small: read `window.location.pathname`, re-read it when the History API moves it, and
  * intercept plain left-clicks on internal links. That is this file — about sixty lines against a
@@ -89,9 +91,11 @@ export function submissionDetailPath(submissionId: string): string {
  *
  * ## Why this exists at all
  *
- * `App.tsx` reads its route table as a `switch` on the exact pathname, which is enough for six of
- * Section 9's seven paths and cannot express the seventh: `/staff/submissions/:submissionId` carries
- * a submission id, and a `switch` compares whole strings. This is the smallest thing that closes
+ * `App.tsx` reads its route table as a `switch` on the exact pathname, which is enough for every one
+ * of Section 9's paths except `/staff/submissions/:submissionId`: it carries a submission id, and a
+ * `switch` compares whole strings. (`/staff/submissions` — the list — is a plain path and *is* a
+ * `switch` case, so it never reaches this function: the pattern below requires a non-empty id
+ * segment, so the two cannot be confused for each other.) This is the smallest thing that closes
  * that gap — a segment-by-segment comparison, no dependency, no second routing mechanism.
  *
  * ## Why it is not a full router
@@ -99,7 +103,7 @@ export function submissionDetailPath(submissionId: string): string {
  * It supports exactly the syntax Section 9's table uses: literal segments and `:name` parameters.
  * There are no wildcards, no optional segments, no nested patterns, and no query parsing — adding
  * any of those would be building the router this repository deliberately does not have, for a route
- * table that is fixed at seven paths.
+ * table fixed by Section 9.
  *
  * A `:name` segment must match something non-empty: `/staff/submissions/` is not a submission id,
  * and letting it through would produce a page that fetches an empty id and reports "not found" for

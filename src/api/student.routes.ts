@@ -2,7 +2,12 @@ import express from 'express';
 import type { Prisma, Submission } from '@prisma/client';
 import type { WritingCorrection, WritingCriterionScore } from '../ai/AIEvaluationService.ts';
 import { getStudentSession, studentSessionMiddleware } from '../auth/session.ts';
-import { getContentLoader, type ContentBundle } from '../content/ContentLoader.ts';
+import {
+  bandForScore,
+  bandForSectionScore,
+  getContentLoader,
+  type ContentBundle,
+} from '../content/ContentLoader.ts';
 import type { Question } from '../content/contentSchemas.ts';
 import { submissionRepository } from '../data/SubmissionRepository.ts';
 import {
@@ -373,16 +378,26 @@ function toStudentReport(submission: Submission): StudentReport {
     contentVersion: submission.contentVersion,
     submittedAt: submission.submittedAt?.toISOString() ?? null,
     deterministic: {
-      grammar: toReportSection(content.grammar.title, content.grammar.questions, scores.grammar),
+      grammar: toReportSection(
+        'grammar',
+        content.grammar.title,
+        content.grammar.questions,
+        scores.grammar,
+        content,
+      ),
       vocabulary: toReportSection(
+        'vocabulary',
         content.vocabulary.title,
         content.vocabulary.questions,
         scores.vocabulary,
+        content,
       ),
       reading: toReportSection(
+        'reading',
         content.reading.title,
         content.reading.passages.flatMap((passage) => passage.questions),
         scores.reading,
+        content,
       ),
     },
     writingStatus: submission.writingStatus,
@@ -436,17 +451,26 @@ function toReportWriting(submission: Submission, content: ContentBundle): Report
     // cannot happen for a `succeeded` row, for the reason the doc comment gives.
     if (!scored) return [];
 
+    const placement = bandForScore(content.writingRubric, criterion.key, scored.score);
+
     return [
       {
         key: criterion.key,
         label: criterion.label,
         score: scored.score,
         rationale: scored.rationale,
+        band: placement.band,
+        bandDescriptor: placement.descriptor,
       },
     ];
   });
 
-  return { overallScore, criteria, ...feedback };
+  return {
+    overallScore,
+    criteria,
+    ...feedback,
+    maxCorrections: content.writingRubric.outputRequirements.maxCorrections,
+  };
 }
 
 /**
@@ -523,9 +547,11 @@ function isCorrectionArray(value: unknown): value is WritingCorrection[] {
  * list of questions, for this same content version.
  */
 function toReportSection(
+  sectionKey: 'grammar' | 'vocabulary' | 'reading',
   title: string,
   questions: Question[],
   scored: SectionScore,
+  content: ContentBundle,
 ): ReportSection {
   const outcomeById = new Map(scored.questions.map((outcome) => [outcome.questionId, outcome]));
 
@@ -548,7 +574,21 @@ function toReportSection(
     ];
   });
 
-  return { title, score: scored.score, maxScore: scored.maxScore, questions: entries };
+  // A section with zero points possible cannot happen — `questionsArraySchema` requires at least
+  // one question and every question's `points` is a positive integer — but dividing by a `maxScore`
+  // of 0 would be silent NaN rather than a loud failure, so this is explicit about the precondition
+  // `bandForSectionScore` depends on.
+  const percent = scored.maxScore > 0 ? (scored.score / scored.maxScore) * 100 : 0;
+  const placement = bandForSectionScore(content.sectionBands, sectionKey, percent);
+
+  return {
+    title,
+    score: scored.score,
+    maxScore: scored.maxScore,
+    questions: entries,
+    band: placement.band,
+    bandDescriptor: placement.descriptor,
+  };
 }
 
 /**

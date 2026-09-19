@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { writingEvaluationSchema } from '../ai/schemas.ts';
 import { REPO_ROOT } from '../config/env.ts';
-import { ContentLoader, ContentValidationError } from './ContentLoader.ts';
+import { bandForScore, ContentLoader, ContentValidationError } from './ContentLoader.ts';
 
 /**
  * Unit coverage for `ContentLoader` (T2.2.4).
@@ -167,6 +167,46 @@ describe('ContentLoader against the committed content', () => {
 
   it('throws for a version that was never loaded instead of falling back to current', () => {
     expect(() => loader.getContent('v99')).toThrow(/Unknown content version/);
+  });
+});
+
+describe('bandForScore', () => {
+  const loader = new ContentLoader();
+
+  it('returns the band and descriptor a real score falls in, for a real committed rubric', () => {
+    const content = loader.getContent('v1');
+    const { criteria, bands, scoreRange } = content.writingRubric;
+    const criterionKey = criteria[0]?.key;
+
+    if (!criterionKey) throw new Error('Fixture rubric has no criteria to test against.');
+
+    // The min of the scale is, by the same tiling guarantee `bandDescriptor` relies on, inside
+    // exactly one band — whichever one `bands.definitions` places `scoreRange.min` in.
+    const expectedBand = bands.definitions.find(
+      (definition) => scoreRange.min >= definition.min && scoreRange.min <= definition.max,
+    );
+
+    if (!expectedBand) throw new Error('scoreRange.min is not covered by any band — content is broken.');
+
+    const placement = bandForScore(content.writingRubric, criterionKey, scoreRange.min);
+
+    expect(placement.band).toBe(expectedBand.name);
+    expect(placement.descriptor).toBe(bands.descriptors[criterionKey]?.[expectedBand.name]);
+  });
+
+  it('throws rather than guessing for a score outside every band', () => {
+    const content = loader.getContent('v1');
+    const criterionKey = content.writingRubric.criteria[0]?.key;
+
+    if (!criterionKey) throw new Error('Fixture rubric has no criteria to test against.');
+
+    // One below the scale's own minimum is guaranteed to be outside every band, since the bands are
+    // validated to tile scoreRange exactly.
+    const belowScale = content.writingRubric.scoreRange.min - 1;
+
+    expect(() => bandForScore(content.writingRubric, criterionKey, belowScale)).toThrow(
+      ContentValidationError,
+    );
   });
 });
 

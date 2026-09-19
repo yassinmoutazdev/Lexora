@@ -234,6 +234,16 @@ export type ReportWritingCriterion = {
   label: string;
   score: number;
   rationale: string;
+  /**
+   * Where this score falls on the rubric's band scale (`ContentLoader.bandForScore`), and what that
+   * band means for this criterion specifically.
+   *
+   * Added so a score is never shown as a bare number: `writing-rubric.json`'s band descriptors
+   * already exist to anchor the model's judgement, and the same text anchors the student's reading
+   * of it — "62" says little on its own, "62 — Competent: ..." says what a 62 actually looks like.
+   */
+  band: string;
+  bandDescriptor: string;
 };
 
 /**
@@ -251,6 +261,14 @@ export type ReportWriting = {
   strengths: string[];
   weaknesses: string[];
   corrections: WritingCorrection[];
+  /**
+   * The rubric's cap on `corrections` (`writing-rubric.json`'s `outputRequirements.maxCorrections`),
+   * carried through so the report can tell the honest difference between "here is every error worth
+   * noting" (`corrections.length < maxCorrections`) and "here are the most important errors, and
+   * there may be more" (`corrections.length === maxCorrections`) — rather than a student reading a
+   * capped list as an exhaustive one.
+   */
+  maxCorrections: number;
   suggestions: string[];
 };
 
@@ -274,6 +292,17 @@ export type ReportSection = {
   score: number;
   maxScore: number;
   questions: ReportQuestion[];
+  /**
+   * Where this section's score falls on the shared Grammar/Vocabulary/Reading band scale
+   * (`ContentLoader.bandForSectionScore`, `content/section-bands.json`), and that band's own text
+   * for this specific section.
+   *
+   * Added for the same reason `ReportWritingCriterion.band`/`bandDescriptor` were: `score`/`maxScore`
+   * alone is a bare percentage with no anchor for what it means, and a student reading "62%" gets
+   * far less than a student reading "62% — Developing: ...".
+   */
+  band: string;
+  bandDescriptor: string;
 };
 
 /**

@@ -1158,6 +1158,30 @@ describe('GET /api/student/report', () => {
     ).toEqual(content.reading.passages.flatMap((passage) => passage.questions).map((q) => q.id));
   });
 
+  it('anchors each section score to a band and that band\'s own descriptor text', async () => {
+    // FR-FEEDBACK: a bare percentage has no anchor on its own, so every deterministic section
+    // carries the band its score falls in and that section's own text for that band, from
+    // `content/section-bands.json` via `ContentLoader.bandForSectionScore`.
+    const content = getContentLoader().getContent('v1');
+    const { agent } = await draftWithSession();
+
+    await agent.post('/api/student/submit').expect(200);
+    const report = await agent.get('/api/student/report').expect(200);
+
+    for (const section of ['grammar', 'vocabulary', 'reading'] as const) {
+      const reported = report.body.deterministic[section];
+      const percent = (reported.score / reported.maxScore) * 100;
+      const expectedBand = content.sectionBands.bands.definitions.find(
+        (band: { min: number; max: number }) => percent >= band.min && percent <= band.max,
+      );
+
+      expect(reported.band).toBe(expectedBand?.name);
+      expect(reported.bandDescriptor).toBe(
+        content.sectionBands.bands.descriptors[section]?.[expectedBand?.name ?? ''],
+      );
+    }
+  });
+
   it('shows a stored answer that names no option rather than showing nothing', async () => {
     // The autosave schema accepts any string as a choice answer, so this is a stored state the
     // report can be asked about. It has no option text — and the report says what is actually

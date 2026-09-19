@@ -1,0 +1,32 @@
+{
+  "contentStatus": "provisional",
+  "statusNote": "Band names (Foundation/Growing/Confident/Advanced), cutoffs, and every descriptor are a first draft, written before any real score distributions exist. Must be reviewed and confirmed by the team before the pilot, the same way writing-rubric.json's own bands are flagged unconfirmed.",
+  "bands": {
+    "definitions": [
+      { "name": "Foundation", "min": 0, "max": 34 },
+      { "name": "Growing", "min": 35, "max": 59 },
+      { "name": "Confident", "min": 60, "max": 79 },
+      { "name": "Advanced", "min": 80, "max": 100 }
+    ],
+    "descriptors": {
+      "grammar": {
+        "Foundation": "You can use basic sentence patterns and familiar verb forms to communicate simple ideas, especially in familiar contexts. Errors with tense, subject–verb agreement, articles, word order, and sentence structure may sometimes make longer or less familiar sentences difficult to follow. Your next step is to make these basic patterns more consistent and begin connecting ideas with a wider range of sentence forms.",
+        "Growing": "You can form clear sentences and use common tenses, articles, and agreement patterns in familiar situations. You are beginning to handle longer sentences, comparisons, questions, and some conditional or passive forms, although errors may appear when structures become more complex. The next step is to use these structures more consistently and accurately across different contexts.",
+        "Confident": "You can use a good range of common grammar structures accurately, including different tenses, complex sentences, conditionals, and passive forms. Most errors are occasional rather than repeated and usually do not affect meaning, though more demanding structures may still cause some difficulty. You are ready to focus on greater precision, flexibility, and control in complex writing.",
+        "Advanced": "You can use a wide range of grammar structures with strong accuracy and control, adapting sentence patterns to express relationships between ideas clearly. You generally handle complex tenses, conditionals, passive constructions, and longer sentences naturally, with only occasional slips or edge cases. Further progress mainly involves refining subtle choices of structure, emphasis, and style rather than mastering basic grammar."
+      },
+      "vocabulary": {
+        "Foundation": "You can use common everyday words to communicate familiar ideas and understand vocabulary that appears frequently in straightforward texts. You may rely on the same familiar words repeatedly or choose a word that is close in meaning but not quite precise. The next step is to build a wider everyday vocabulary and become more confident with words that express finer differences in meaning.",
+        "Growing": "You can use a growing range of everyday and topic-specific vocabulary to express ideas with reasonable clarity. You are beginning to distinguish between similar words and use less common expressions, although word choice may sometimes be too general or slightly inaccurate. The next step is to expand your range and become more precise when choosing words for different contexts.",
+        "Confident": "You can use a broad vocabulary to discuss familiar and less familiar topics, including many topic-specific words and useful expressions. You usually choose words accurately and can recognize important differences between near-synonyms, although subtle shades of meaning may still be challenging. The next step is to develop greater nuance and flexibility, especially with less common or abstract vocabulary.",
+        "Advanced": "You can use a wide and flexible vocabulary to express precise ideas across a broad range of topics. You generally distinguish effectively between similar words, understand nuance, and use topic-specific or less common vocabulary when the context calls for it. Occasional unfamiliar terms or very fine distinctions may still require context, but your vocabulary gives you strong control over meaning and expression."
+      },
+      "reading": {
+        "Foundation": "You can understand the main idea and find clearly stated information in short, familiar texts, especially when the language is straightforward. You may need more support when information is implied, vocabulary is unfamiliar, or several ideas are connected across a text. The next step is to move beyond finding explicit answers and begin using clues in the text to work out meaning.",
+        "Growing": "You can understand the main ideas and important details in a range of familiar texts and locate specific information with reasonable confidence. You are beginning to make simple inferences, connect information across paragraphs, and understand some meaning that is not stated directly. The next step is to become more consistent when interpreting implied ideas, tone, and the relationships between different parts of a text.",
+        "Confident": "You can understand both main ideas and supporting details in moderately complex texts and usually work out meaning that is not stated directly. You can make reasonable inferences, recognize changes in tone, and connect information across different parts of a text. The next step is to handle more subtle interpretations, unfamiliar language, and questions about an author's purpose or intended effect.",
+        "Advanced": "You can understand complex texts in depth, including explicit information, implied meaning, tone, and the relationships between ideas. You can usually infer an author's purpose, recognize subtle shifts in meaning or attitude, and interpret information that depends on context rather than direct statements. Very specialized language, ambiguity, or highly subtle interpretations may still require careful reading, but you can engage confidently with a wide range of texts."
+      }
+    }
+  }
+}

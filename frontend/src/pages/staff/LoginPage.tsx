@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiError, staffLogin } from '../../api/client';
+import { ThemeToggle } from '../../components/ThemeToggle';
 import { Link, navigate } from '../../router';
 
 /**
@@ -92,7 +93,8 @@ export function LoginPage() {
   }
 
   return (
-    <main className="page">
+    <main className="page page--toggle">
+      <ThemeToggle variant="floating" />
       <div className="card">
         <h1>Staff login</h1>
         <p className="lede">Sign in to view assessment results and export the pilot data.</p>

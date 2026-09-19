@@ -561,8 +561,19 @@ There is deliberately **no** `/report/:id` or any route parameter that identifie
 |---|---|---|
 | `/staff/login` | Email/password login | Public |
 | `/staff/dashboard` | Aggregate views, cohort filter | Requires staff session |
+| `/staff/submissions` | The submissions list, as clickable cards into each record | Requires staff session |
 | `/staff/submissions/:submissionId` | Individual submission detail | Requires staff session; every access is logged server-side via structured application logging (Section 13) |
 | `/staff/export` | CSV export | Requires staff session |
+
+**Amendment — `/staff/submissions` (added after v1.1).** The staff sidebar has carried a second nav
+item labelled "Submissions" since the shell was built, but it pointed at `/staff/dashboard`, so it
+navigated nowhere and the only route into an individual record was the card list further down the
+dashboard. This route gives that item a destination. It adds a **route** and deliberately **no API
+endpoint**: Section 10 describes the API as *"deliberately small — one endpoint per real user
+action"*, and `GET /api/staff/dashboard` already returns the rows the list needs
+(`recentSubmissions`). The page therefore renders part of an existing payload, and inherits its
+bound — the 25 most recent submissions — which it states on the page rather than hiding. `FR-STAFF-010`
+was already satisfied without this route; this is a navigation fix, not a new capability.
 
 **Session behavior:** two independent cookie-based sessions exist — a staff session (longer-lived, e.g. 8 hours, since staff return to the dashboard repeatedly) and a student session (short-lived, e.g. 30 minutes of inactivity, re-established trivially by re-entering identity). Neither session type grants access to the other's routes; middleware (`requireStaffSession` / `requireStudentSession`) is applied per router, not globally, so the two access boundaries can never be accidentally merged.
 

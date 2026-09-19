@@ -527,6 +527,149 @@ export const studentProblemsFileSchema = z
     }
   });
 
+/**
+ * The band scale for the three deterministic sections (Grammar / Vocabulary / Reading).
+ *
+ * Grammar, Vocabulary, and Reading are each scored as a 0-100 percentage of their own maximum
+ * (`SectionAggregate.meanPercent`'s per-submission counterpart), but a bare percentage has no
+ * anchor for a student reading it — this file is what gives it one, the same way `writingRubric`'s
+ * `bands` anchors a writing criterion's score.
+ *
+ * Unlike the writing rubric, the three sections share one scale (`definitions`) rather than each
+ * defining their own: the scale is a statement about what a percentage *means* regardless of
+ * section, and the descriptor text is where each section's own texture (grammar accuracy patterns,
+ * vocabulary range, reading inference) comes in.
+ */
+export const sectionBandsFileSchema = z
+  .object({
+    contentStatus: contentStatusSchema,
+    statusNote: z.string().min(1).optional(),
+    bands: z
+      .object({
+        definitions: z
+          .array(
+            z
+              .object({
+                name: z.string().min(1),
+                min: z.number(),
+                max: z.number(),
+              })
+              .strict(),
+          )
+          .min(1),
+        /** Section key → band name → what that section's score looks like at that band. */
+        descriptors: z.record(
+          z.string().min(1),
+          z.record(z.string().min(1), z.string().min(1)),
+        ),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((file, ctx) => {
+    requireStatusNote(file, ctx);
+
+    const sectionKeys = ['grammar', 'vocabulary', 'reading'] as const;
+    const bandNames = file.bands.definitions.map((band) => band.name);
+
+    const duplicateBand = bandNames.find((name, index) => bandNames.indexOf(name) !== index);
+    if (duplicateBand) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bands', 'definitions'],
+        message: `duplicate band name ${JSON.stringify(duplicateBand)}`,
+      });
+    }
+
+    for (const [index, band] of file.bands.definitions.entries()) {
+      if (band.min >= band.max) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['bands', 'definitions', index],
+          message: `band ${JSON.stringify(band.name)} must have min less than max`,
+        });
+      }
+    }
+
+    // Percentages, so the scale is fixed at 0-100 rather than read from elsewhere — there is no
+    // separate scoreRange for this file to agree or disagree with, unlike the writing rubric.
+    const orderedBands = [...file.bands.definitions].sort((a, b) => a.min - b.min);
+    const firstBand = orderedBands[0];
+    const lastBand = orderedBands[orderedBands.length - 1];
+
+    if (firstBand && firstBand.min !== 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bands', 'definitions'],
+        message: `bands must start at 0, got ${firstBand.min}`,
+      });
+    }
+    if (lastBand && lastBand.max !== 100) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bands', 'definitions'],
+        message: `bands must end at 100, got ${lastBand.max}`,
+      });
+    }
+
+    for (let index = 1; index < orderedBands.length; index += 1) {
+      const previous = orderedBands[index - 1]!;
+      const current = orderedBands[index]!;
+
+      if (Math.abs(current.min - (previous.max + 1)) > 1e-9) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['bands', 'definitions'],
+          message:
+            `bands must be contiguous: ${JSON.stringify(previous.name)} ends at ${previous.max} ` +
+            `but ${JSON.stringify(current.name)} starts at ${current.min}`,
+        });
+      }
+    }
+
+    const descriptorKeys = Object.keys(file.bands.descriptors);
+    const missingDescriptorBlocks = sectionKeys.filter((key) => !descriptorKeys.includes(key));
+    const unknownDescriptorBlocks = descriptorKeys.filter(
+      (key) => !(sectionKeys as readonly string[]).includes(key),
+    );
+
+    if (missingDescriptorBlocks.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bands', 'descriptors'],
+        message: `no band descriptors for section(s): ${missingDescriptorBlocks.join(', ')}`,
+      });
+    }
+    if (unknownDescriptorBlocks.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bands', 'descriptors'],
+        message: `band descriptors given for unknown section(s): ${unknownDescriptorBlocks.join(', ')}`,
+      });
+    }
+
+    for (const [sectionKey, byBand] of Object.entries(file.bands.descriptors)) {
+      const provided = Object.keys(byBand);
+      const missingBands = bandNames.filter((name) => !provided.includes(name));
+      const unknownBands = provided.filter((name) => !bandNames.includes(name));
+
+      if (missingBands.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['bands', 'descriptors', sectionKey],
+          message: `no descriptor at band(s): ${missingBands.join(', ')}`,
+        });
+      }
+      if (unknownBands.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['bands', 'descriptors', sectionKey],
+          message: `descriptor given for unknown band(s): ${unknownBands.join(', ')}`,
+        });
+      }
+    }
+  });
+
 /** `content/current-version.json` — which version new drafts start under. */
 export const currentVersionFileSchema = z
   .object({
@@ -543,4 +686,5 @@ export type ReadingFile = z.infer<typeof readingFileSchema>;
 export type WritingPromptFile = z.infer<typeof writingPromptFileSchema>;
 export type WritingRubricFile = z.infer<typeof writingRubricFileSchema>;
 export type StudentProblemsFile = z.infer<typeof studentProblemsFileSchema>;
+export type SectionBandsFile = z.infer<typeof sectionBandsFileSchema>;
 export type CurrentVersionFile = z.infer<typeof currentVersionFileSchema>;

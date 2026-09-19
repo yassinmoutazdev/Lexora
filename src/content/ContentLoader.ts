@@ -6,11 +6,13 @@ import {
   currentVersionFileSchema,
   deterministicSectionFileSchema,
   readingFileSchema,
+  sectionBandsFileSchema,
   studentProblemsFileSchema,
   writingPromptFileSchema,
   writingRubricFileSchema,
   type DeterministicSectionFile,
   type ReadingFile,
+  type SectionBandsFile,
   type StudentProblemsFile,
   type WritingPromptFile,
   type WritingRubricFile,
@@ -39,6 +41,7 @@ const FILE_NAMES = {
   writingPrompt: 'writing-prompt.json',
   writingRubric: 'writing-rubric.json',
   studentProblems: 'student-problems-statements.json',
+  sectionBands: 'section-bands.json',
 } as const;
 
 const CURRENT_VERSION_FILE = 'current-version.json';
@@ -52,6 +55,8 @@ export type ContentBundle = {
   writingPrompt: WritingPromptFile;
   writingRubric: WritingRubricFile;
   studentProblems: StudentProblemsFile;
+  /** The band scale for Grammar/Vocabulary/Reading percentages — see `sectionBandsFileSchema`. */
+  sectionBands: SectionBandsFile;
 
   /**
    * The text the model is given when it evaluates a free-writing response, because the background
@@ -187,6 +192,85 @@ function bandDescriptor(rubric: WritingRubricFile, criterionKey: string, bandNam
   return descriptor;
 }
 
+/**
+ * One criterion score's place on the rubric's band scale — the band name and that band's own
+ * descriptor text, for the same criterion.
+ *
+ * This is the student-report counterpart to `composeWritingRubricInstructions`, which builds the
+ * *full* band table for every criterion into the model's prompt. The report needs only the one band
+ * a given score actually landed in, not all four — so this looks up a single cell of the same table
+ * `bandDescriptor` already reads, rather than introducing a second source for band text.
+ */
+export type WritingBandPlacement = {
+  /** The band's own name, e.g. "Competent" — `bands.definitions[].name` verbatim. */
+  band: string;
+  /** That band's descriptor for this criterion — the same text the model was anchored against. */
+  descriptor: string;
+};
+
+/**
+ * Finds the band a criterion score falls in, and returns its name plus its descriptor text.
+ *
+ * `bands.definitions` is validated (`contentSchemas.ts`) to tile `scoreRange` exactly once with no
+ * gaps, so exactly one definition matches any in-range score — there is no "between bands" case to
+ * handle. A score outside the validated bands (which should never reach this function, since
+ * `WritingScoreCalculator`/the schema both clamp to `scoreRange`) throws rather than silently
+ * guessing a neighbour, for the same "loud over blank" reasoning `bandDescriptor` uses.
+ */
+export function bandForScore(
+  rubric: WritingRubricFile,
+  criterionKey: string,
+  score: number,
+): WritingBandPlacement {
+  const band = rubric.bands.definitions.find(
+    (definition) => score >= definition.min && score <= definition.max,
+  );
+
+  if (!band) {
+    throw new ContentValidationError(
+      `Score ${score} for criterion ${JSON.stringify(criterionKey)} falls outside every band in ` +
+        `bands.definitions. contentSchemas.ts should guarantee the bands tile the full scoreRange.`,
+    );
+  }
+
+  return { band: band.name, descriptor: bandDescriptor(rubric, criterionKey, band.name) };
+}
+
+/**
+ * One deterministic section's band descriptor for a percentage score, from `sectionBandsFileSchema`.
+ *
+ * `sectionBands.bands.definitions` is validated to tile 0-100 exactly once, so — same reasoning as
+ * `bandForScore` — exactly one band matches any in-range percentage and this throws rather than
+ * guessing outside it.
+ */
+export function bandForSectionScore(
+  sectionBands: SectionBandsFile,
+  sectionKey: 'grammar' | 'vocabulary' | 'reading',
+  percent: number,
+): WritingBandPlacement {
+  const band = sectionBands.bands.definitions.find(
+    (definition) => percent >= definition.min && percent <= definition.max,
+  );
+
+  if (!band) {
+    throw new ContentValidationError(
+      `Percentage ${percent} for section ${JSON.stringify(sectionKey)} falls outside every band in ` +
+        `section-bands.json. contentSchemas.ts should guarantee the bands tile 0-100.`,
+    );
+  }
+
+  const descriptor = sectionBands.bands.descriptors[sectionKey]?.[band.name];
+
+  if (!descriptor) {
+    throw new ContentValidationError(
+      `Missing band descriptor for section ${JSON.stringify(sectionKey)} at band ` +
+        `${JSON.stringify(band.name)}. contentSchemas.ts should have rejected this file.`,
+    );
+  }
+
+  return { band: band.name, descriptor };
+}
+
 function composeWritingRubricInstructions(
   writingPrompt: WritingPromptFile,
   writingRubric: WritingRubricFile,
@@ -268,6 +352,7 @@ function loadVersion(version: string, versionDir: string): ContentBundle {
     studentProblemsFileSchema,
     'studentProblems',
   );
+  const sectionBands = readContentFile(file(FILE_NAMES.sectionBands), sectionBandsFileSchema);
 
   return {
     version,
@@ -277,6 +362,7 @@ function loadVersion(version: string, versionDir: string): ContentBundle {
     writingPrompt,
     writingRubric,
     studentProblems,
+    sectionBands,
     writingRubricInstructions: composeWritingRubricInstructions(writingPrompt, writingRubric),
     writingRubricWeights: writingRubric.weights,
   };

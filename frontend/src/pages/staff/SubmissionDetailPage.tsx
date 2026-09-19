@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { StaffSubmissionDetail } from '../../../../src/shared/types/staff';
 import type { ProcessingStatus } from '../../../../src/shared/types/sections';
 import { ApiError, getStaffSubmissionDetail } from '../../api/client';
+import { StaffLayout } from '../../components/StaffLayout';
 import { Link, navigate } from '../../router';
 
 /**
@@ -102,9 +103,8 @@ export function SubmissionDetailPage({ submissionId }: { submissionId: string })
  */
 export function SubmissionDetailBody({ submission }: { submission: StaffSubmissionDetail }) {
   return (
-    <main className="page page--wide">
+    <StaffLayout activeItem="submissions" title={submission.studentName}>
       <div className="card">
-        <h1>{submission.studentName}</h1>
         <p className="lede">
           Roll number <strong>{submission.rollNumber}</strong> · {submission.cohort.code}
           {submission.cohort.name !== '' && <> ({submission.cohort.name})</>}
@@ -126,7 +126,7 @@ export function SubmissionDetailBody({ submission }: { submission: StaffSubmissi
       <ScoresPanel submission={submission} />
       <WritingPanel submission={submission} />
       <StudentProblemsPanel submission={submission} />
-    </main>
+    </StaffLayout>
   );
 }
 

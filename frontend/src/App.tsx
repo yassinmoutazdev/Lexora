@@ -1,9 +1,11 @@
 import { DashboardPage } from './pages/staff/DashboardPage';
 import { LoginPage } from './pages/staff/LoginPage';
 import { SubmissionDetailPage } from './pages/staff/SubmissionDetailPage';
+import { SubmissionsPage } from './pages/staff/SubmissionsPage';
 import { AssessmentPage } from './pages/student/AssessmentPage';
 import { EntryPage } from './pages/student/EntryPage';
 import { ReportPage } from './pages/student/ReportPage';
+import { ThemeToggle } from './components/ThemeToggle';
 import { Link, SUBMISSION_DETAIL_PATTERN, matchPath, usePathname } from './router';
 
 /**
@@ -56,6 +58,9 @@ export function App() {
     case '/staff/dashboard':
       return <DashboardPage />;
 
+    case '/staff/submissions':
+      return <SubmissionsPage />;
+
     default:
       return <NotFound pathname={pathname} />;
   }
@@ -77,7 +82,8 @@ function NotBuiltYet({ title, task }: { title: string; task: string }) {
 
 function NotFound({ pathname }: { pathname: string }) {
   return (
-    <main className="page">
+    <main className="page page--toggle">
+      <ThemeToggle variant="floating" />
       <div className="card">
         <h1>Page not found</h1>
         <p className="lede">There is nothing at {pathname}.</p>

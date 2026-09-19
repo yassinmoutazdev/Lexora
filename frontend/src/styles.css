@@ -1,42 +1,124 @@
 /*
- * The application's stylesheet — a plain, hand-written baseline.
+ * Lexora design system — v0.1
+ * ============================================================================
+ * Coded counterpart of LEXORA_Preliminary_UI_UX_Spec_v1.0.md and the design
+ * reference materials (design-tokens.ts + the HTML screen references). Plain
+ * CSS on purpose, same as before: no build step, no preprocessor, nothing
+ * here a later reader has to look up the semantics of.
  *
- * Not in ARCHITECTURE Section 4's file list, and deliberately so: Section 2 pins a dependency set
- * with no CSS framework or design system in it, and PRD Section 9.7 (FR-STAFF-012) asks for
- * something simple and focused rather than a designed product. This file is the smallest thing that
- * meets the PRD's actual ask — Section 8.1 requires the entry page to be *designed primarily for
- * students*, and the Student Problems instrument (T4.3.4) is a page of fifteen scale rows that has
- * to stay readable on a phone as well as a laptop.
- *
- * The rules are grouped by what they are for, and everything is plain CSS on purpose: no build
- * step, no preprocessor, and nothing here that a later reader has to look up the semantics of.
+ * Structure: tokens (root vars, light + dark) → base → layout → staff shell
+ * → forms → assessment → notices → report → writing feedback → staff panels
+ * → student problems (scale + language toggle) → submission cards.
+ * ============================================================================
  */
 
 :root {
-  --ink: #1c1f23;
-  --ink-soft: #5a626c;
-  --ink-faint: #838c97;
+  --ink: #16191d;
+  --ink-soft: #565f6b;
+  --ink-faint: #8892a0;
   --paper: #ffffff;
-  --page: #f4f5f7;
-  --line: #d9dde2;
-  --line-soft: #e8ebef;
-  --accent: #1f5f8b;
-  --accent-soft: #eaf1f6;
-  --alert-bg: #fdf1f0;
-  --alert-line: #e5b4ae;
-  --alert-ink: #8c2f24;
-  --ok-ink: #2f6b45;
+  --page: #f3f5f8;
+  --surface-sunken: #eceef2;
+  --line: #dde1e7;
+  --line-soft: #e9ecf0;
 
-  --radius: 10px;
+  --accent: #1e5c8c;
+  --accent-strong: #134369;
+  --accent-soft: #e9f1f8;
+  --accent-soft-strong: #d7e6f2;
+
+  --success: #2b7a53;
+  --success-soft: #e9f6ee;
+  --warning: #8a5a12;
+  --warning-line: #e5c98a;
+  --warning-soft: #faf1e2;
+  --danger: #b3261e;
+  --danger-soft: #fbeceb;
+
+  /* Reserved for AI-derived / non-scoring content only (Student Problems). Never used for anything
+     that is part of the English score, so the hue itself signals "not a result" (spec Section 9). */
+  --ai: #6a4f9c;
+  --ai-soft: #f1edf8;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
   --gap: 1rem;
+
+  --shadow-raised: 0 1px 2px rgba(15, 23, 32, 0.04), 0 4px 14px rgba(15, 23, 32, 0.06);
+
+  --font-ui: 'Public Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  --font-head: 'Lora', Georgia, 'Times New Roman', serif;
+  --font-arabic: 'Noto Naskh Arabic', var(--font-ui);
+
+  --sidebar-w: 15.5rem;
 }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --ink: #eef1f5;
+    --ink-soft: #aab2bd;
+    --ink-faint: #7a8290;
+    --paper: #1b1f26;
+    --page: #14171c;
+    --surface-sunken: #20242c;
+    --line: #2e333c;
+    --line-soft: #262a32;
+
+    --accent: #6fa8d8;
+    --accent-strong: #8fbde3;
+    --accent-soft: #1c2c3a;
+    --accent-soft-strong: #223547;
+
+    --success: #5bc48a;
+    --success-soft: #17281f;
+    --warning: #e0ac4f;
+    --warning-line: #6b5323;
+    --warning-soft: #2b2214;
+    --danger: #e5847d;
+    --danger-soft: #2e1c1b;
+
+    --ai: #b39ce0;
+    --ai-soft: #241f30;
+  }
+}
+
+:root[data-theme='dark'] {
+  --ink: #eef1f5;
+  --ink-soft: #aab2bd;
+  --ink-faint: #7a8290;
+  --paper: #1b1f26;
+  --page: #14171c;
+  --surface-sunken: #20242c;
+  --line: #2e333c;
+  --line-soft: #262a32;
+
+  --accent: #6fa8d8;
+  --accent-strong: #8fbde3;
+  --accent-soft: #1c2c3a;
+  --accent-soft-strong: #223547;
+
+  --success: #5bc48a;
+  --success-soft: #17281f;
+  --warning: #e0ac4f;
+  --warning-line: #6b5323;
+  --warning-soft: #2b2214;
+  --danger: #e5847d;
+  --danger-soft: #2e1c1b;
+
+  --ai: #b39ce0;
+  --ai-soft: #241f30;
+}
+
+/* ---------------------------------------------------------------- base */
 
 * {
   box-sizing: border-box;
 }
 
 html {
-  /* Never a fixed viewport height: the assessment is long and scrolls normally. */
   -webkit-text-size-adjust: 100%;
 }
 
@@ -44,13 +126,11 @@ body {
   margin: 0;
   background: var(--page);
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, "Noto Sans", "Noto Naskh Arabic", sans-serif;
-  font-size: 17px;
-  line-height: 1.55;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.6;
 }
 
-/* Visible focus everywhere, because the whole assessment is keyboard-operable. */
 :focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
@@ -63,19 +143,31 @@ a {
 /* ---------------------------------------------------------------- layout */
 
 .page {
-  max-width: 46rem;
+  max-width: 42rem;
   margin: 0 auto;
-  padding: 2rem 1rem 4rem;
+  padding: 2rem 1.25rem 4rem;
 }
 
 .page--wide {
-  max-width: 56rem;
+  max-width: 62rem;
+}
+
+/*
+  Reserves room for the floating theme toggle, so it never sits on top of the first card's content
+  on a narrow screen where the cards run nearly edge to edge.
+
+  A modifier rather than more padding on `.page` itself, because the room is only needed where the
+  control actually is: the staff loading and error shells also use `.page`, and they carry no
+  toggle — their screens' shell provides one.
+*/
+.page--toggle {
+  padding-top: 3.4rem;
 }
 
 .card {
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   padding: 1.5rem;
 }
 
@@ -83,18 +175,31 @@ a {
   margin-top: var(--gap);
 }
 
+/* The one sanctioned "look here first" surface per screen (overall result, current question). */
+.card--emphasis {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+  padding: 1.75rem;
+}
+
 h1 {
+  font-family: var(--font-head);
+  font-weight: 600;
   font-size: 1.6rem;
   line-height: 1.25;
   margin: 0 0 0.5rem;
 }
 
 h2 {
+  font-family: var(--font-head);
+  font-weight: 600;
   font-size: 1.2rem;
   margin: 0 0 0.75rem;
 }
 
 h3 {
+  font-family: var(--font-ui);
+  font-weight: 600;
   font-size: 1rem;
   margin: 1.25rem 0 0.5rem;
 }
@@ -114,12 +219,152 @@ h3 {
   font-size: 0.85rem;
 }
 
-/* The small staff entry point PRD Section 8.1 asks for — present, quiet, not competing. */
 .staff-link {
   display: inline-block;
   margin-top: 2rem;
   font-size: 0.85rem;
   color: var(--ink-soft);
+}
+
+/* ---------------------------------------------------------------- staff shell */
+
+.staff-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.staff-sidebar {
+  width: var(--sidebar-w);
+  flex: none;
+  background: var(--paper);
+  border-inline-end: 1px solid var(--line);
+  padding: 1.25rem 1rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.staff-sidebar .brand {
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 1.15rem;
+  padding: 0.4rem 0.6rem 1.4rem;
+}
+
+.staff-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius-sm);
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  font-weight: 500;
+  text-decoration: none;
+  margin-bottom: 0.15rem;
+}
+
+.staff-nav-item svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+}
+
+.staff-nav-item[aria-current='true'] {
+  background: var(--accent-soft-strong);
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.staff-nav-item:hover:not([aria-current='true']) {
+  background: var(--surface-sunken);
+}
+
+.staff-sidebar-footer {
+  margin-top: auto;
+  padding: 0.7rem;
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+}
+
+.staff-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.staff-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.staff-topbar h1 {
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.staff-content {
+  padding: 1.75rem 2rem 4rem;
+}
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  background: var(--page);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  padding: 0.35rem 0.8rem 0.35rem 0.6rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/*
+  `:not(:disabled)` is load-bearing, not decoration. The generic `button:hover:not(:disabled)` rule
+  below carries specificity (0,2,1) and sets `background: var(--accent-strong)`; a plain
+  `.theme-toggle:hover` is (0,2,0) and loses to it. The visible result was this control turning
+  accent-coloured on hover while keeping its own muted `color` — light-blue on light-grey in dark
+  mode, which made the label unreadable. Matching the generic rule's specificity here is what makes
+  this one win, and it is the same idiom `button.secondary:hover:not(:disabled)` already uses.
+*/
+.theme-toggle:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+.theme-toggle svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/*
+  The floating placement, for screens that have no topbar to sit in — the student screens, the staff
+  login, and the not-found page (see `ThemeToggle`).
+
+  `--paper` rather than the default `--page`, plus a shadow, because this one is pinned over
+  whatever happens to be beneath it: a `--page`-coloured pill over a card would read as a hole in
+  the card rather than as a control floating above it.
+
+  The page shells that carry it reserve room for it — `.page` and `.page--wide` below add top
+  padding, so the control never sits on top of the first card's content on a narrow screen where
+  the cards run nearly edge to edge.
+*/
+.theme-toggle--floating {
+  position: fixed;
+  top: 0.9rem;
+  right: 1rem;
+  z-index: 20;
+  background: var(--paper);
+  box-shadow: var(--shadow-raised);
 }
 
 /* ---------------------------------------------------------------- forms */
@@ -138,12 +383,21 @@ h3 {
 .field input,
 .field textarea {
   width: 100%;
-  padding: 0.6rem 0.7rem;
+  padding: 0.65rem 0.8rem;
   font: inherit;
   color: inherit;
-  background: var(--paper);
+  background: var(--page);
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.field input:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--paper);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .field textarea {
@@ -154,11 +408,11 @@ h3 {
 
 .field--invalid input,
 .field--invalid textarea {
-  border-color: var(--alert-line);
+  border-color: var(--danger);
 }
 
 .field-error {
-  color: var(--alert-ink);
+  color: var(--danger);
   font-size: 0.87rem;
   margin: 0.35rem 0 0;
 }
@@ -166,30 +420,33 @@ h3 {
 button {
   font: inherit;
   font-weight: 600;
-  padding: 0.6rem 1.1rem;
+  padding: 0.65rem 1.2rem;
   color: #fff;
   background: var(--accent);
   border: 1px solid var(--accent);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
+  transition: background 120ms ease;
 }
 
 button:hover:not(:disabled) {
-  background: #17496b;
+  background: var(--accent-strong);
 }
 
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 button.secondary {
   color: var(--accent);
   background: var(--paper);
+  border-color: var(--line);
 }
 
 button.secondary:hover:not(:disabled) {
   background: var(--accent-soft);
+  border-color: var(--accent-soft-strong);
 }
 
 .button-row {
@@ -202,174 +459,40 @@ button.secondary:hover:not(:disabled) {
 /* ---------------------------------------------------------------- notices */
 
 .notice {
-  border: 1px solid var(--alert-line);
-  background: var(--alert-bg);
-  color: var(--alert-ink);
-  border-radius: var(--radius);
-  padding: 0.8rem 1rem;
+  border: 1px solid var(--warning-line);
+  background: var(--warning-soft);
+  color: var(--ink);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1.1rem;
   margin-bottom: 1.25rem;
 }
 
 .notice p {
   margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
 }
 
-/* The privacy notice ahead of the open-ended question (FR-PROB-014 / NFR-PRIV-009). */
-.notice--privacy {
-  border-color: var(--line);
-  background: var(--accent-soft);
+.notice[role='alert'] {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.notice[role='alert'] p {
   color: var(--ink);
+}
+
+.notice--privacy {
+  border-color: var(--accent-soft-strong);
+  background: var(--accent-soft);
 }
 
 .notice--privacy h3 {
   margin-top: 0;
+  font-size: 0.9rem;
 }
 
 /* ---------------------------------------------------------------- assessment */
-
-.question-list {
-  list-style: none;
-  margin: 1.25rem 0 0;
-  padding: 0;
-}
-
-.answer {
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  padding: 1rem 1.1rem;
-  margin-bottom: 0.9rem;
-}
-
-/* The prompt is a <legend>, so it needs the layout reset a legend does not get by default. */
-.answer legend.prompt {
-  font-weight: 500;
-  padding: 0;
-  margin-bottom: 0.7rem;
-}
-
-.question-number {
-  display: block;
-  color: var(--ink-faint);
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 0.2rem;
-}
-
-.options {
-  display: grid;
-  gap: 0.25rem;
-}
-
-.option {
-  display: flex;
-  gap: 0.55rem;
-  align-items: flex-start;
-  padding: 0.4rem 0.5rem;
-  border-radius: 6px;
-}
-
-.option:hover {
-  background: var(--accent-soft);
-}
-
-.option input {
-  margin: 0.3rem 0 0;
-  flex: none;
-}
-
-.option label {
-  cursor: pointer;
-  flex: 1;
-}
-
-.writing-task {
-  border-left: 3px solid var(--accent);
-  background: #fbfbfc;
-  padding: 0.9rem 1rem;
-  margin-bottom: 1rem;
-}
-
-.writing-task h3 {
-  margin-top: 0;
-}
-
-.writing-task .prompt {
-  font-weight: 500;
-  margin: 0 0 0.5rem;
-}
-
-.writing-task .hint {
-  margin: 0;
-}
-
-.passage {
-  background: #fbfbfc;
-  border-left: 3px solid var(--line);
-  padding: 0.9rem 1rem;
-  margin-bottom: 1rem;
-  white-space: pre-wrap;
-}
-
-.passage h3 {
-  margin-top: 0;
-}
-
-/* The five-point agreement scale (FR-PROB-002). One fieldset per statement, so the browser
-   enforces a single response and the statement itself is the group's accessible name. */
-.scale-row {
-  border: none;
-  border-top: 1px solid var(--line-soft);
-  border-radius: 0;
-  padding: 0.9rem 0;
-  margin: 0;
-}
-
-.scale-row:first-of-type {
-  border-top: none;
-}
-
-.scale-row legend.scale-statement {
-  font-weight: 500;
-  padding: 0;
-  margin-bottom: 0.6rem;
-}
-
-.scale-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.scale-option {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.7rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  font-size: 0.88rem;
-  background: var(--paper);
-}
-
-.scale-option:hover {
-  background: var(--accent-soft);
-}
-
-.scale-option:has(input:checked) {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  font-weight: 600;
-}
-
-.scale-option label {
-  cursor: pointer;
-}
-
-.scale-option input {
-  flex: none;
-}
 
 .section-nav {
   display: flex;
@@ -383,38 +506,248 @@ button.secondary:hover:not(:disabled) {
 .section-nav button {
   font-weight: 500;
   font-size: 0.88rem;
-  padding: 0.4rem 0.8rem;
+  padding: 0.45rem 0.9rem;
   color: var(--ink-soft);
-  background: var(--paper);
+  background: var(--page);
   border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
 }
 
-.section-nav button[aria-current="true"] {
+.section-nav button:hover:not([aria-current='true']) {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: var(--accent-soft-strong);
+}
+
+.section-nav button[aria-current='true'] {
   color: #fff;
   background: var(--accent);
   border-color: var(--accent);
 }
 
 .section-nav .tick {
-  color: var(--ok-ink);
+  color: var(--success);
   font-weight: 700;
 }
 
-/* ---------------------------------------------------------------- status */
-
-.save-status {
-  font-size: 0.87rem;
-  color: var(--ink-soft);
-  min-height: 1.4em;
+.section-nav button[aria-current='true'] .tick {
+  color: #fff;
 }
 
-.save-status--error {
-  color: var(--alert-ink);
+.question-list {
+  list-style: none;
+  margin: 1.25rem 0 0;
+  padding: 0;
+}
+
+/* ---------------------------------------------------------------- report summary strip */
+
+.summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+}
+
+.summary-item {
+  background: var(--card);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 0.6rem;
+  text-align: center;
+}
+
+.summary-label {
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.summary-pct {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-top: 0.15rem;
+}
+
+@media (max-width: 480px) {
+  .summary-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ---------------------------------------------------------------- section band descriptions */
+
+.band-card {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 1rem;
+  margin-top: 1rem;
+}
+
+.band-card:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0.75rem;
+}
+
+.band-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 0.4rem;
+}
+
+.band-section-name {
+  font-weight: 700;
+}
+
+.band-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.78rem;
   font-weight: 600;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
-.save-status--saved {
-  color: var(--ok-ink);
+/* ---------------------------------------------------------------- collapsed question detail */
+
+.detail-heading {
+  font-size: 1rem;
+  margin: 0 0 1rem;
+}
+
+details.detail-panel {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+details.detail-panel + details.detail-panel {
+  margin-top: 0.75rem;
+}
+
+details.detail-panel summary {
+  cursor: pointer;
+  padding: 0.9rem 1.1rem;
+  font-weight: 600;
+  list-style: none;
+}
+
+details.detail-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+details.detail-panel[open] summary {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+details.detail-panel .question-list {
+  margin: 0;
+  padding: 0.75rem 1.1rem 1rem;
+}
+
+.answer {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.2rem;
+  margin-bottom: 0.9rem;
+}
+
+.answer legend.prompt {
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: 0.8rem;
+}
+
+.question-number {
+  display: block;
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.3rem;
+}
+
+.options {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.option {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+}
+
+.option:hover {
+  background: var(--accent-soft);
+}
+
+.option:has(input:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-strong);
+}
+
+.option input {
+  margin: 0;
+  flex: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--accent);
+}
+
+.option label {
+  cursor: pointer;
+  flex: 1;
+}
+
+.option:has(input:checked) label {
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+.writing-task {
+  border: 1px solid var(--line);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.writing-task h3 {
+  margin-top: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+.writing-task .prompt {
+  font-weight: 600;
+  margin: 0 0 0.6rem;
+}
+
+.writing-task .hint {
+  margin: 0;
+}
+
+.passage {
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1rem;
+  white-space: pre-wrap;
+}
+
+.passage h3 {
+  margin-top: 0;
 }
 
 .progress {
@@ -427,15 +760,59 @@ button.secondary:hover:not(:disabled) {
   padding-left: 1.2rem;
 }
 
+/* Submit — shown only on the assessment's last section, deliberately lightweight: a statement of
+   readiness plus one button, not a card that competes with the section content above it. */
+.submit-panel {
+  border-top: 1px solid var(--line);
+  padding-top: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.submit-panel p {
+  margin: 0 0 0.9rem;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+.submit-panel .incomplete-sections {
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+/* ---------------------------------------------------------------- status */
+
+.save-status {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  min-height: 1.4em;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.save-status--error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.save-status--saved::before {
+  content: '●';
+  font-size: 0.55rem;
+  color: var(--success);
+}
+
+.save-status--saved {
+  color: var(--success);
+}
+
 /* ---------------------------------------------------------------- report */
 
-/* The section's score, beside its title. Muted rather than emphasised: the explanations below are
-   what the student is meant to read, and the number is a summary of them. */
 .score {
   color: var(--ink-soft);
   font-size: 0.9rem;
   font-weight: 600;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .report-question {
@@ -451,7 +828,7 @@ button.secondary:hover:not(:disabled) {
 }
 
 .report-prompt {
-  font-weight: 500;
+  font-weight: 600;
   margin-bottom: 0.4rem;
 }
 
@@ -459,23 +836,24 @@ button.secondary:hover:not(:disabled) {
   margin: 0.2rem 0;
 }
 
-/*
- * Correct / incorrect is written out, not only coloured. Colour alone would carry the whole meaning
- * for a reader who cannot distinguish these two hues, and the word is the meaning anyway.
- */
 .verdict {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  border-radius: var(--radius-pill);
+  padding: 0.1rem 0.55rem;
+  display: inline-block;
 }
 
 .verdict--correct {
-  color: var(--ok-ink);
+  color: var(--success);
+  background: var(--success-soft);
 }
 
 .verdict--wrong {
-  color: var(--alert-ink);
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .report-explanation {
@@ -519,19 +897,23 @@ button.secondary:hover:not(:disabled) {
 }
 
 .criterion-label {
-  font-weight: 500;
+  font-weight: 600;
 }
 
-/*
- * The four feedback lists and the corrections share this block. `margin-top` rather than a border:
- * they are sections of one evaluation, and a rule between each would read as five separate results.
- */
+.criterion-band {
+  font-weight: 600;
+}
+
+.criterion-band-descriptor {
+  font-style: italic;
+}
+
 .feedback-block {
   margin-top: 1.5rem;
 }
 
 .feedback-block h3 {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   margin-bottom: 0.5rem;
 }
 
@@ -561,24 +943,18 @@ button.secondary:hover:not(:disabled) {
   margin: 0;
 }
 
-/* The two texts are the pair; the arrow between them is punctuation, and is left muted. */
 .correction-original {
   text-decoration: line-through;
-  color: var(--ink-soft);
+  color: var(--ink-faint);
 }
 
 .correction-fixed {
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--success);
 }
 
-/* ---------------------------------------------------------------- staff views */
+/* ---------------------------------------------------------------- staff panels */
 
-/*
- * The Student Problems panel (T8.2.2) is where FR-PROB-011 has to hold visually: derived data must
- * not read as the student's own words. A label alone is satisfied by a heading a reader skips, so
- * the original is set as a quotation and the derived block is given its own border, background, and
- * an explicit tag. The two must not be mistakable at a glance, which is the whole requirement.
- */
 .original-text {
   margin: 0.5rem 0 0.5rem 0;
   padding: 0 0 0 0.9rem;
@@ -588,12 +964,18 @@ button.secondary:hover:not(:disabled) {
   white-space: pre-wrap;
 }
 
+[dir='rtl'] .original-text {
+  padding: 0 0.9rem 0 0;
+  border-left: none;
+  border-right: 3px solid var(--line);
+}
+
 .derived {
   margin-top: 1.5rem;
-  padding: 0.9rem 1rem 1rem;
-  border: 1px dashed var(--line);
-  border-radius: var(--radius);
-  background: var(--page);
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid var(--ai);
+  border-radius: var(--radius-md);
+  background: var(--ai-soft);
 }
 
 .derived-head {
@@ -603,13 +985,13 @@ button.secondary:hover:not(:disabled) {
 .derived-tag {
   display: inline-block;
   font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--ink-faint);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 0.1rem 0.55rem;
+  color: var(--ai);
+  border: 1px solid var(--ai);
+  border-radius: var(--radius-pill);
+  padding: 0.1rem 0.6rem;
 }
 
 .derived-text--open {
@@ -617,7 +999,7 @@ button.secondary:hover:not(:disabled) {
   padding: 0.7rem 0.9rem;
   background: var(--paper);
   border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   white-space: pre-wrap;
 }
 
@@ -653,14 +1035,9 @@ button.secondary:hover:not(:disabled) {
 }
 
 .category-label {
-  font-weight: 500;
+  font-weight: 600;
 }
 
-/*
- * The dashboard's counters and distributions (T8.3.1). A definition-style row of label and value,
- * plus a bar drawn with a width percentage — hand-written markup on purpose: FR-STAFF-012 asks for
- * a simple internal view, and Section 2 pins no charting library.
- */
 .metric {
   display: flex;
   justify-content: space-between;
@@ -683,7 +1060,7 @@ button.secondary:hover:not(:disabled) {
 
 .metric-value {
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .bar-row {
@@ -701,8 +1078,8 @@ button.secondary:hover:not(:disabled) {
 
 .bar-track {
   background: var(--line-soft);
-  border-radius: 999px;
-  height: 0.7rem;
+  border-radius: var(--radius-pill);
+  height: 0.6rem;
   overflow: hidden;
 }
 
@@ -710,7 +1087,7 @@ button.secondary:hover:not(:disabled) {
   display: block;
   background: var(--accent);
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   min-width: 0;
 }
 
@@ -719,11 +1096,6 @@ button.secondary:hover:not(:disabled) {
   text-align: right;
 }
 
-/*
- * A `select` styled to match the text inputs, for the cohort filter (FR-STAFF-009). Deliberately
- * minimal: the native control keeps its own keyboard and mobile behaviour, which a hand-built
- * dropdown would have to reimplement badly.
- */
 .filter-row {
   display: flex;
   flex-wrap: wrap;
@@ -733,13 +1105,13 @@ button.secondary:hover:not(:disabled) {
 }
 
 .filter-row label {
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .filter-row select {
-  padding: 0.45rem 0.5rem;
+  padding: 0.5rem 0.6rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--paper);
   color: var(--ink);
   font: inherit;
@@ -754,37 +1126,648 @@ button.secondary:hover:not(:disabled) {
   margin-top: 1rem;
 }
 
+/* ---------------------------------------------------------------- submission cards */
 
 /*
- * The recent-submissions list (T8.2.3) — the way into an individual submission (FR-STAFF-010).
- *
- * A real table, because the data is tabular and a table is what a screen reader can navigate by
- * column. `width: 100%` with a scroll wrapper rather than a fixed layout: the roll number and name
- * are student-supplied and can be long, and a table that widens the page is worse than one that
- * scrolls inside its card.
+ * Cards-first submission list (spec Section 8): each submission is a clickable card rather than a
+ * table row. The card is the link itself — one focusable, keyboard-operable target — rather than a
+ * `<div onClick>`, which would be invisible to a keyboard and to a screen reader, and could not be
+ * opened in a new tab.
  */
-.submission-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 0.75rem;
+.submission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.submission-card {
+  display: block;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.25rem;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.submission-card:hover,
+.submission-card:focus-visible {
+  box-shadow: var(--shadow-raised);
+  border-color: var(--accent-soft-strong);
+}
+
+.submission-card .submission-name {
+  font-weight: 600;
+  margin: 0 0 0.15rem;
+  color: var(--ink);
+}
+
+.submission-card .submission-meta {
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+  margin: 0 0 0.8rem;
+}
+
+.submission-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.15rem 0.65rem;
+  border-radius: var(--radius-pill);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.submission-status--draft {
+  background: var(--surface-sunken);
+  color: var(--ink-soft);
+}
+
+/* ---------------------------------------------------------------- student problems */
+
+/*
+ * FR-PROB-011-adjacent, on the student-facing side: Student Problems must read as visually distinct
+ * from the scored sections so a student never mistakes "this is being collected for research" with
+ * "this affects my English score" (spec Section 9). The AI accent hue is reserved for exactly this.
+ */
+.ai-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  background: var(--ai-soft);
+  border: 1px solid var(--ai);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1.5rem;
+}
+
+.ai-banner .ai-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--ai);
+  margin-top: 0.45rem;
+  flex: none;
+}
+
+.ai-banner strong {
+  color: var(--ai);
+  display: block;
+  font-size: 0.88rem;
+  margin-bottom: 0.15rem;
+}
+
+.ai-banner p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+}
+
+.problems-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* The EN/AR toggle for the Student Problems section specifically (carried into the real app). A
+   segmented control rather than a dropdown: there are exactly two states and both should be visible
+   and reachable in one action. */
+.lang-toggle {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  padding: 0.2rem;
+  gap: 0.2rem;
+  flex: none;
+}
+
+.lang-toggle button {
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.3rem 0.85rem;
+  border-radius: var(--radius-pill);
+  border: none;
+  color: var(--ink-soft);
+  background: transparent;
+  cursor: pointer;
+}
+
+.lang-toggle button[aria-pressed='true'] {
+  background: var(--ai);
+  color: #fff;
+}
+
+.lang-toggle button:hover:not([aria-pressed='true']) {
+  background: var(--surface-sunken);
+}
+
+.scale-category {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  margin: 1.5rem 0 0.3rem;
+  text-transform: uppercase;
+}
+
+.scale-category:first-of-type {
+  margin-top: 0.5rem;
+}
+
+.scale-row {
+  border: none;
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0;
+  padding: 1rem 0;
+  margin: 0;
+}
+
+.scale-row:first-of-type {
+  border-top: none;
+}
+
+.scale-row legend.scale-statement {
+  font-weight: 500;
+  padding: 0;
+  margin-bottom: 0.7rem;
   font-size: 0.95rem;
 }
 
-.submission-table th,
-.submission-table td {
-  text-align: left;
-  padding: 0.5rem 0.6rem;
-  border-top: 1px solid var(--line-soft);
-  vertical-align: baseline;
+/*
+ * The five-point scale as one row. `flex-wrap: nowrap` plus `flex: 1 1 0` on each option is what
+ * keeps "Strongly agree" from wrapping onto its own line: every option takes an equal share of the
+ * row's width instead of its natural text width, and the row scrolls horizontally on the narrowest
+ * phones rather than wrapping (wrapping is what put "Strongly agree" alone before).
+ */
+.scale-options {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  overflow-x: auto;
+  padding-bottom: 0.1rem;
 }
 
-.submission-table th {
-  border-top: none;
+.scale-option {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.45rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  font-size: 0.82rem;
+  background: var(--paper);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.scale-option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scale-option:hover {
+  background: var(--ai-soft);
+  border-color: var(--ai);
+}
+
+.scale-option:has(input:checked) {
+  border-color: var(--ai);
+  background: var(--ai-soft);
+  font-weight: 600;
+  color: var(--ai);
+}
+
+.scale-option label {
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scale-option input {
+  flex: none;
+  accent-color: var(--ai);
+}
+
+@media (max-width: 26rem) {
+  .scale-options {
+    justify-content: flex-start;
+  }
+
+  .scale-option {
+    flex: 0 0 auto;
+    min-width: 5.5rem;
+  }
+}
+
+/* ---------------------------------------------------------------- dashboard: KPI strip */
+
+/*
+ * Quiet by default, loud only where something needs attention (see `KpiCard`/`needsReview` in
+ * DashboardPage.tsx). This is the "look here first" moment the dashboard's redesign added — before
+ * this, a failed evaluation sat in a plain metric list at the same visual weight as a routine count.
+ */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  /*
+    Symmetric above and below. Only the bottom margin was here, so the strip sat flush against the
+    intro card above it and the four figures read as the tail of that card rather than as a band of
+    their own. 1.5rem is the value the gap below already used.
+  */
+  margin: 1.5rem 0;
+}
+
+.kpi-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.25rem;
+}
+
+.kpi-label {
   color: var(--ink-soft);
-  font-weight: 500;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
+  margin: 0 0 0.4rem;
 }
 
-.submission-table tbody tr:hover {
-  background: var(--page);
+.kpi-value {
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 1.7rem;
+  margin: 0;
+}
+
+.kpi-sub {
+  color: var(--ink-faint);
+  font-size: 0.78rem;
+  margin: 0.25rem 0 0;
+}
+
+.kpi-card--attention {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.kpi-card--attention .kpi-label {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.kpi-card--attention .kpi-value {
+  color: var(--danger);
+}
+
+.kpi-card--quiet .kpi-value {
+  color: var(--ink-faint);
+}
+
+@media (max-width: 40rem) {
+  .kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ---------------------------------------------------------------- dashboard: section comparison */
+
+/* One grouped bar chart for FR-STAFF-006's four-section comparison, replacing four separate
+   stacked lists a reader had to compare by eye. */
+.compare-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.75rem;
+  height: 11rem;
+  padding: 0 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.compare-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.compare-bar-track {
+  width: 100%;
+  max-width: 3.2rem;
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  background: var(--surface-sunken);
+  border-radius: 6px 6px 0 0;
+  overflow: hidden;
+}
+
+.compare-bar-fill {
+  /* The value is positioned against the bar it belongs to. */
+  position: relative;
+  width: 100%;
+  background: var(--accent);
+  border-radius: 6px 6px 0 0;
+  transition: height 300ms ease;
+}
+
+/*
+  The value sits above its bar — inside the grey track, clear of the blue. `bottom: 100%` anchors it
+  to the bar's top edge, and the track's own `overflow: hidden` is what keeps it within the grey
+  area and the track's width.
+*/
+.compare-value {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 0.2rem;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/*
+  Where the bar leaves no room above it, the value moves inside the bar and takes the fill's
+  contrasting colour. Which of the two applies is decided in `SectionComparisonChart`, from the
+  bar's height — CSS cannot ask whether a box's own contents fit above it.
+*/
+.compare-value--inside {
+  bottom: auto;
+  top: 0;
+  margin-top: 0.25rem;
+  margin-bottom: 0;
+  color: #fff;
+}
+
+.compare-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: center;
+  margin: 0;
+}
+
+.compare-n {
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  margin: 0;
+}
+
+/* The full distribution, tucked behind a click — same disclosure idiom the Report uses for
+   question-by-question detail (spec Section 8: overall result first, detail secondary). */
+details.dist-toggle {
+  margin-top: 0.6rem;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 0.8rem;
+}
+
+details.dist-toggle summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  list-style: none;
+}
+
+details.dist-toggle summary::-webkit-details-marker {
+  display: none;
+}
+
+details.dist-toggle summary::before {
+  content: '▸ ';
+}
+
+details.dist-toggle[open] summary::before {
+  content: '▾ ';
+}
+
+/* ---------------------------------------------------------------- dashboard: weakest topics */
+
+/* Ranked, severity-tinted list rather than another per-topic histogram — "where should curriculum
+   time go" is a ranking question, not a distribution question. See `WeakestTopicsPanel`. */
+.rank-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rank-row {
+  display: grid;
+  grid-template-columns: 11rem 1fr 3rem;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.rank-row:first-child {
+  border-top: none;
+}
+
+.rank-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.rank-section {
+  display: block;
+  font-weight: 400;
+  font-size: 0.76rem;
+  color: var(--ink-faint);
+}
+
+.rank-track {
+  background: var(--surface-sunken);
+  border-radius: var(--radius-pill);
+  height: 0.7rem;
+  overflow: hidden;
+  display: block;
+}
+
+.rank-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  display: block;
+}
+
+/* Worst to best. Named by severity rather than by color, so a future palette change (including a
+   colorblind-safe one) only has to touch these four declarations. */
+.sev-1 {
+  background: var(--danger);
+}
+
+.sev-2 {
+  background: #c9862c;
+}
+
+.sev-3 {
+  background: #c9a52c;
+}
+
+.sev-4 {
+  background: var(--success);
+}
+
+.rank-pct {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 30rem) {
+  .rank-row {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+
+  .rank-pct {
+    text-align: left;
+  }
+}
+
+/* ---------------------------------------------------------------- dashboard: writing criteria */
+
+/* Same ranked-bar idiom as the weakest-topics panel, reusing scores already computed and stored by
+   WritingScoreCalculator — no new model call, purely an average of numbers that exist. */
+.criteria-grid {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.criteria-row {
+  display: grid;
+  grid-template-columns: 9rem 1fr 3rem;
+  align-items: center;
+  gap: 0.8rem;
+  font-size: 0.88rem;
+}
+
+.criteria-track {
+  background: var(--surface-sunken);
+  border-radius: var(--radius-pill);
+  height: 0.65rem;
+  overflow: hidden;
+  display: block;
+}
+
+.criteria-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  display: block;
+}
+
+.criteria-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 30rem) {
+  .criteria-row {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+}
+
+/* ---------------------------------------------------------------- dashboard: student problems ranking */
+
+/* The "leads with a ranking, full detail on demand" panel — see `ProblemsPanel`. Reuses the AI
+   accent hue already reserved for non-scoring, AI-adjacent content (styles.css's student-problems
+   block above), so the dashboard's Student Problems panel and the assessment's Student Problems
+   section read as the same kind of thing wherever a reader encounters either. */
+.ai-panel {
+  background: var(--ai-soft);
+  border: 1px solid var(--ai);
+  border-radius: var(--radius-md);
+  padding: 1.4rem 1.5rem;
+}
+
+.ai-panel h2 {
+  color: var(--ai);
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin: 0 0 0.3rem;
+}
+
+.ai-rank-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ai-rank-row {
+  display: grid;
+  grid-template-columns: 1fr 3.2rem;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.ai-rank-row:first-child {
+  border-top: none;
+}
+
+.ai-statement {
+  font-size: 0.88rem;
+}
+
+.ai-mean {
+  text-align: right;
+  font-weight: 700;
+  color: var(--ai);
+  font-variant-numeric: tabular-nums;
+}
+
+details.ai-detail summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ai);
+  list-style: none;
+  margin-top: 1rem;
+}
+
+details.ai-detail summary::-webkit-details-marker {
+  display: none;
+}
+
+details.ai-detail summary::before {
+  content: '▸ ';
+}
+
+details.ai-detail[open] summary::before {
+  content: '▾ ';
+}
+
+/* Right-to-left support for the Arabic language state of Student Problems. Scoped to the section so
+   switching languages here never affects the rest of the (LTR) application shell. */
+[dir='rtl'] {
+  font-family: var(--font-arabic);
+}
+
+[dir='rtl'] .scale-row legend.scale-statement,
+[dir='rtl'] .ai-banner,
+[dir='rtl'] .problems-header,
+[dir='rtl'] .notice--privacy {
+  text-align: right;
+}
+
+[dir='rtl'] .field label {
+  text-align: right;
 }

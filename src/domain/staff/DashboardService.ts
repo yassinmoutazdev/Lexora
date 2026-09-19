@@ -83,6 +83,45 @@ export type DifficultyComparison =
   | { available: true; levels: DifficultyAggregate[]; questionsPerLevel: Record<string, number> }
   | { available: false; reason: DifficultyOmission };
 
+/**
+ * One skill/topic's accuracy across the cohort — the "weakest topics" panel.
+ *
+ * FR-DET-002 requires every Grammar/Vocabulary/Reading question to carry a `skill` label
+ * ("used for staff analysis", per `contentSchemas.ts`), and until now nothing read it: not scoring,
+ * not the student report, not this dashboard. This is that reading. It reuses the exact per-question
+ * outcomes `buildDifficulty` already recomputes from `difficultyInputs` — grouped by `skill` instead
+ * of `difficulty` — so it costs no extra query.
+ *
+ * ## Why this is *not* gated the way the difficulty comparison is
+ *
+ * `buildDifficulty` refuses to render at all while the question set is `provisional`, because a
+ * per-*level* breakdown of a development set is a claim about calibration — "Basic is calibrated
+ * easier than Intermediate" — that a dev set has not earned. A per-*topic* accuracy is a different
+ * kind of claim: "the cohort keeps missing this specific, currently-deployed question about relative
+ * clauses", which is simply true of the content actually given, provisional or not. It is the same
+ * fact the student report already states, ungated, for every individual question. So this panel is
+ * gated only on `MIN_RESPONSES_PER_TOPIC` — a sample-size floor — not on content approval.
+ */
+export type TopicAggregate = {
+  skill: string;
+  section: DeterministicSectionKey;
+  sectionTitle: string;
+  /** Responses to this skill's question(s), not students — see `DifficultyAggregate.responses`. */
+  responses: number;
+  correct: number;
+  accuracyPercent: number;
+};
+
+/** One writing rubric criterion's mean score across evaluated submissions. */
+export type WritingCriterionAggregate = {
+  key: string;
+  /** The rubric's own label for this criterion (`writing-rubric.json`), never invented here. */
+  label: string;
+  meanScore: number;
+  /** How many evaluated writing responses contributed — the denominator `meanScore` is drawn from. */
+  responses: number;
+};
+
 /** A cohort as the filter control and the applied-filter heading need it. */
 export type CohortSummary = {
   id: string;
@@ -225,6 +264,10 @@ export type DashboardPayload = {
   };
   /** The conditional difficulty-level comparison (FR-STAFF-007). */
   difficulty: DifficultyComparison;
+  /** The lowest-scoring skills/topics cohort-wide, worst first (see `TopicAggregate`). Capped at `WEAKEST_TOPICS_LIMIT`, and topics under `MIN_RESPONSES_PER_TOPIC` responses are left out rather than shown thin. */
+  weakestTopics: TopicAggregate[];
+  /** Mean score per writing rubric criterion across evaluated submissions, in the rubric's own order. */
+  writingCriteria: WritingCriterionAggregate[];
   /**
    * The most recent submissions, newest first, as links into the individual-submission view
    * (FR-STAFF-010, T8.2.3).
@@ -316,6 +359,28 @@ const PROCESSING_STATUSES = [
 const MIN_QUESTIONS_PER_LEVEL = 3;
 
 /**
+ * How many responses a topic needs before its accuracy is reported in the weakest-topics panel.
+ *
+ * Not a question-count floor like `MIN_QUESTIONS_PER_LEVEL` — it can't be one. Every skill label in
+ * the current content is carried by exactly one question (see the grammar/vocabulary/reading question
+ * files), so a floor on *questions per skill* would always evaluate to one and gate nothing. What
+ * makes one skill's accuracy meaningful is enough *students* having answered that question, which is
+ * a floor on responses instead. Five is the same order of magnitude as `MIN_QUESTIONS_PER_LEVEL`'s
+ * reasoning: below it, one or two students' luck decides the whole figure.
+ */
+const MIN_RESPONSES_PER_TOPIC = 5;
+
+/**
+ * How many topics the weakest-topics panel shows.
+ *
+ * Same reasoning as `RECENT_SUBMISSIONS_LIMIT`: the panel exists to point staff at where curriculum
+ * time is best spent, not to restate every skill's accuracy — a ranked list longer than the worst
+ * handful stops being "look here first" and starts being the per-question data the report and the
+ * CSV export already carry in full (FR-STAFF-012).
+ */
+const WEAKEST_TOPICS_LIMIT = 5;
+
+/**
  * The sections the difficulty comparison covers, and why it is not all five.
  *
  * FR-STAFF-007's "section structure" clause. Only Grammar, Vocabulary, and Reading carry questions
@@ -382,6 +447,7 @@ export class DashboardService {
       likertRows,
       derivedRows,
       difficultyRows,
+      writingCriteriaRows,
       recentRows,
     ] = await Promise.all([
       this.deps.dashboard.listCohorts(),
@@ -390,6 +456,7 @@ export class DashboardService {
       this.deps.dashboard.likertResponseCounts(filter),
       this.deps.dashboard.derivedCategoryCounts(filter),
       this.deps.dashboard.difficultyInputs(filter),
+      this.deps.dashboard.writingCriteriaScores(filter),
       this.deps.dashboard.recentSubmissions(filter, RECENT_SUBMISSIONS_LIMIT),
     ]);
 
@@ -407,6 +474,8 @@ export class DashboardService {
           analysedResponses: countAnalysedResponses(processingRows),
         },
         difficulty: this.buildDifficulty(difficultyRows),
+        weakestTopics: this.buildWeakestTopics(difficultyRows),
+        writingCriteria: this.buildWritingCriteria(writingCriteriaRows),
         recentSubmissions: recentRows.map((row) => ({
           id: row.id,
           rollNumber: row.rollNumberRaw,
@@ -708,6 +777,119 @@ export class DashboardService {
   }
 
   /**
+   * The weakest-topics panel (see `TopicAggregate` for what it is and why it is gated differently
+   * from the difficulty comparison).
+   *
+   * Reuses `rows` — the same `difficultyInputs` this call already fetched for `buildDifficulty` — and
+   * the same per-question re-scoring, grouped by `skill` instead of `difficulty`. Two aggregates
+   * built from one query and one scoring pass, rather than a second round trip for a second grouping
+   * of the same underlying facts.
+   */
+  private buildWeakestTopics(rows: DifficultyInputRowLike[]): TopicAggregate[] {
+    const totals = new Map<
+      string,
+      { skill: string; section: DeterministicSectionKey; sectionTitle: string; responses: number; correct: number }
+    >();
+
+    for (const row of rows) {
+      const bundle = this.deps.content.getContent(row.contentVersion);
+      const scores = scoreDeterministicSections(toDraftAnswers(row), bundle);
+
+      for (const section of DIFFICULTY_SECTIONS) {
+        const questionsById = new Map(
+          (section === 'reading'
+            ? bundle.reading.passages.flatMap((passage) => passage.questions)
+            : bundle[section].questions
+          ).map((question) => [question.id, question]),
+        );
+
+        for (const outcome of scores[section].questions) {
+          const question = questionsById.get(outcome.questionId);
+
+          // Unreachable for content that loaded (`questionSchema` requires `skill`), same as the
+          // equivalent guard in `buildDifficulty` — kept explicit rather than assumed.
+          if (question === undefined) continue;
+
+          // Keyed by section + skill, not skill alone: two sections could coincidentally reuse a
+          // label, and conflating "Word formation" in Vocabulary with a same-named Reading skill
+          // would average two different things into one number.
+          const key = `${section}:${question.skill}`;
+          const total = totals.get(key) ?? {
+            skill: question.skill,
+            section,
+            sectionTitle: bundle[section].title,
+            responses: 0,
+            correct: 0,
+          };
+
+          total.responses += 1;
+          if (outcome.correct) total.correct += 1;
+          totals.set(key, total);
+        }
+      }
+    }
+
+    return [...totals.values()]
+      .filter((total) => total.responses >= MIN_RESPONSES_PER_TOPIC)
+      .map((total) => ({
+        skill: total.skill,
+        section: total.section,
+        sectionTitle: total.sectionTitle,
+        responses: total.responses,
+        correct: total.correct,
+        accuracyPercent: round((total.correct / total.responses) * 100),
+      }))
+      // Worst first; more responses breaks a tie, since a thin-but-qualifying topic's accuracy is
+      // the less certain of two equal figures.
+      .sort((a, b) => a.accuracyPercent - b.accuracyPercent || b.responses - a.responses)
+      .slice(0, WEAKEST_TOPICS_LIMIT);
+  }
+
+  /**
+   * Writing's mean score per rubric criterion, across evaluated submissions.
+   *
+   * The section-level `sections` aggregate already reports Writing's overall mean; this is the
+   * breakdown underneath it, using scores that are already computed and stored by
+   * `WritingScoreCalculator` at evaluation time — no new model call, purely an average of numbers
+   * that exist.
+   */
+  private buildWritingCriteria(rows: WritingCriteriaInputRowLike[]): WritingCriterionAggregate[] {
+    // The rubric defines the criteria this breakdown has columns for; a row with no rubric to read
+    // has nothing to report against, so an empty result (not zeroed criteria with invented labels)
+    // is the honest answer with no submissions yet.
+    const version = rows[0]?.contentVersion ?? this.deps.content.getCurrentVersion();
+    const rubric = this.deps.content.getContent(version).writingRubric;
+
+    const totals = new Map<string, { sum: number; responses: number }>(
+      rubric.criteria.map((criterion) => [criterion.key, { sum: 0, responses: 0 }]),
+    );
+
+    for (const row of rows) {
+      const scores = asCriteriaScores(row.criteriaScores);
+      if (scores === undefined) continue;
+
+      for (const [key, total] of totals) {
+        const criterion = scores[key];
+        if (criterion === undefined) continue;
+
+        total.sum += criterion.score;
+        total.responses += 1;
+      }
+    }
+
+    return rubric.criteria.map((criterion) => {
+      const total = totals.get(criterion.key) ?? { sum: 0, responses: 0 };
+
+      return {
+        key: criterion.key,
+        label: criterion.label,
+        meanScore: total.responses === 0 ? 0 : round(total.sum / total.responses),
+        responses: total.responses,
+      };
+    });
+  }
+
+  /**
    * The content bundle's own title for a section, so a heading cannot contradict its section.
    */
   private sectionTitle(section: string, versions: Set<string>): string {
@@ -858,6 +1040,12 @@ type DifficultyInputRowLike = {
   reading: unknown;
 };
 
+/** The row shape `buildWritingCriteria` reads. */
+type WritingCriteriaInputRowLike = {
+  contentVersion: string;
+  criteriaScores: unknown;
+};
+
 /**
  * Whether the question set behind a bundle is final (FR-STAFF-007's first gate).
  *
@@ -931,6 +1119,21 @@ function asChoiceAnswers(value: unknown): Record<string, string> | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
 
   return value as Record<string, string>;
+}
+
+/**
+ * `writingCriteriaScores` as stored, or undefined when the column held something else.
+ *
+ * A row that reaches `buildWritingCriteria` already satisfies `writingStatus = 'succeeded' AND
+ * writingCriteriaScores IS NOT NULL` (the repository's `WHERE` clause), so `undefined` here is not
+ * an expected outcome — it is the same defence-in-depth `asChoiceAnswers` applies: the column's type
+ * is `Json?`, which nothing at the database layer stops from holding a string or an array, so a
+ * degenerate value is skipped rather than trusted.
+ */
+function asCriteriaScores(value: unknown): Record<string, { score: number }> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+
+  return value as Record<string, { score: number }>;
 }
 
 function toCohortSummary(cohort: { id: string; code: string; name: string }): CohortSummary {

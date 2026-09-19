@@ -1,7 +1,12 @@
+import { useState } from 'react';
 import type {
   DraftAnswers,
   StudentProblemsFile,
 } from '../../../../src/shared/types/draft';
+import {
+  translateStudentProblems,
+  type StudentProblemsLanguage,
+} from './studentProblemsTranslations';
 
 /**
  * The Student Problems instrument (PRD Section 9.5, T4.3.4).
@@ -18,13 +23,25 @@ import type {
  *
  * ## Writing in either language
  *
- * `dir="auto"` on the field is the mechanism, and it is not decoration. Arabic is right-to-left and
- * English is left-to-right; a fixed `dir` would render one of them backwards, and the browser is
- * the only thing that can tell which it is looking at. `dir="auto"` resolves direction from the
- * first strong character the student types, re-evaluating as they type — so a student who writes in
- * English and then switches to Arabic sees the field follow them. Nothing here detects a language,
- * counts characters, or normalizes the text: what the student typed is what is stored (FR-PROB-009),
- * and the AI's separate interpretation is a later, derived concern (T7.4.1).
+ * `dir="auto"` on the free-text field is the mechanism, and it is not decoration. Arabic is
+ * right-to-left and English is left-to-right; a fixed `dir` would render one of them backwards, and
+ * the browser is the only thing that can tell which it is looking at. `dir="auto"` resolves
+ * direction from the first strong character the student types, re-evaluating as they type — so a
+ * student who writes in English and then switches to Arabic sees the field follow them. Nothing here
+ * detects a language, counts characters, or normalizes the text: what the student typed is what is
+ * stored (FR-PROB-009), and the AI's separate interpretation is a later, derived concern (T7.4.1).
+ *
+ * ## The EN/AR display toggle
+ *
+ * This is separate from the field's `dir="auto"` above, and answers a different question: not "which
+ * way does what the student typed run", but "which language are the statements themselves shown in".
+ * The section defaults to Arabic — the pilot cohort's own language — with a segmented EN/AR control
+ * to switch the *display* language for the scale statements, area labels, and instructions. It is a
+ * UI-layer translation (`studentProblemsTranslations.ts`) rather than a change to the stored content,
+ * since the underlying instrument stays the single English source of truth the content team edits;
+ * switching languages relabels the same statement ids, it does not change which statement is being
+ * answered, and a student's answers stay keyed by `statement.id` regardless of which language they
+ * were reading in when they gave them.
  *
  * ## On the open text being optional
  *
@@ -53,12 +70,52 @@ export function StudentProblemsSection({
   const likertAnswers = answers?.likertAnswers ?? {};
   const openText = answers?.openText ?? '';
 
+  // Defaults to Arabic (the pilot cohort's language), switchable per FR — see the class doc above.
+  const [language, setLanguage] = useState<StudentProblemsLanguage>('ar');
+  const t = translateStudentProblems(instrument, language);
+  const dir = language === 'ar' ? 'rtl' : 'ltr';
+
   function answerStatement(statementId: string, value: number) {
     onChange({ ...answers, likertAnswers: { ...likertAnswers, [statementId]: value } });
   }
 
   return (
-    <>
+    <div dir={dir} lang={language}>
+      <div className="ai-banner">
+        <span className="ai-dot" aria-hidden="true" />
+        <div>
+          <strong>{language === 'ar' ? 'لا يؤثر على درجتك في الإنجليزية' : 'Not part of your English score'}</strong>
+          <p>
+            {language === 'ar'
+              ? 'تُستخدم إجاباتك هنا لأغراض البحث في المناهج الدراسية فقط. لا تؤثر أبدًا على نتائجك في القواعد أو المفردات أو القراءة أو الكتابة.'
+              : 'Your answers here are used for curriculum research only. They never affect your Grammar, Vocabulary, Reading, or Writing results.'}
+          </p>
+        </div>
+      </div>
+
+      <div className="problems-header">
+        <p className="hint" style={{ margin: 0, flex: '1 1 16rem' }}>
+          {t.instructions}
+        </p>
+
+        <div className="lang-toggle" role="group" aria-label="Section language">
+          <button
+            type="button"
+            aria-pressed={language === 'ar'}
+            onClick={() => setLanguage('ar')}
+          >
+            AR
+          </button>
+          <button
+            type="button"
+            aria-pressed={language === 'en'}
+            onClick={() => setLanguage('en')}
+          >
+            EN
+          </button>
+        </div>
+      </div>
+
       {instrument.areas.map((area) => {
         const statements = instrument.statements.filter((statement) => statement.area === area.id);
 
@@ -68,15 +125,22 @@ export function StudentProblemsSection({
 
         return (
           <section key={area.id}>
-            <h3>{area.label}</h3>
+            <p className="scale-category">{t.areas[area.id] ?? area.label}</p>
 
             {statements.map((statement) => (
               <fieldset className="scale-row" key={statement.id}>
-                <legend className="scale-statement">{statement.text}</legend>
+                <legend className="scale-statement">
+                  {t.statements[statement.id] ?? statement.text}
+                </legend>
 
+                {/* One row, deliberately: each option takes an equal share of the row's width (see
+                    .scale-options in styles.css) so the five points — including the longest label,
+                    "Strongly agree" / "موافق بشدة" — sit on a single line instead of the last one
+                    wrapping alone. */}
                 <div className="scale-options">
                   {instrument.scale.map((point) => {
                     const inputId = `${statement.id}-${point.value}`;
+                    const label = t.scale[point.value] ?? point.label;
 
                     return (
                       <div className="scale-option" key={point.value}>
@@ -90,7 +154,9 @@ export function StudentProblemsSection({
                           checked={likertAnswers[statement.id] === point.value}
                           onChange={() => answerStatement(statement.id, point.value)}
                         />
-                        <label htmlFor={inputId}>{point.label}</label>
+                        <label htmlFor={inputId} title={label}>
+                          <span>{label}</span>
+                        </label>
                       </div>
                     );
                   })}
@@ -103,27 +169,25 @@ export function StudentProblemsSection({
 
       {/* FR-PROB-014 / NFR-PRIV-009 — ahead of the field, not beside it. */}
       <div className="notice notice--privacy">
-        <h3>{instrument.openTextQuestion.privacyNoticeHeading}</h3>
-        <p>{instrument.openTextQuestion.privacyNotice}</p>
+        <h3>{t.openTextQuestion.privacyNoticeHeading}</h3>
+        <p>{t.openTextQuestion.privacyNotice}</p>
       </div>
 
       <div className="field">
-        <label htmlFor="problemsOpenText">{instrument.openTextQuestion.prompt}</label>
+        <label htmlFor="problemsOpenText">{t.openTextQuestion.prompt}</label>
         <textarea
           id="problemsOpenText"
           name="problemsOpenText"
           value={openText}
           onChange={(event) => onChange({ ...answers, openText: event.target.value })}
           onBlur={() => void onEditingDone()}
-          // Follows the student's script rather than assuming one — see the note above.
+          // Follows what the student actually types rather than the section's display language —
+          // see the class doc above for why this is deliberately independent of `language`.
           dir="auto"
           rows={6}
         />
-        <p className="hint">
-          You may answer in English or Arabic. This question is optional — you can submit without
-          answering it.
-        </p>
+        <p className="hint">{t.openTextQuestion.hint}</p>
       </div>
-    </>
+    </div>
   );
 }

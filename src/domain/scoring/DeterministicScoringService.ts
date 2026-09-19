@@ -70,6 +70,10 @@ export type DeterministicContent = {
  * will matter to the staff difficulty comparison in FR-STAFF-007, but nothing in scoring or in the
  * student report reads them, and a field carried "for later" is a field nobody has yet agreed the
  * meaning of.
+ *
+ * (An earlier draft of the student report carried `skill` through here to group questions by topic.
+ * That grouping was tried and explicitly rejected on review — the report shows a flat question list
+ * instead — so `skill` was removed again rather than left wired to a feature that no longer exists.)
  */
 export type QuestionScore = {
   questionId: string;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiError, verifyStudentIdentity } from '../../api/client';
+import { ThemeToggle } from '../../components/ThemeToggle';
 import { Link, navigate } from '../../router';
 
 /**
@@ -92,7 +93,8 @@ export function EntryPage() {
   }
 
   return (
-    <main className="page">
+    <main className="page page--toggle">
+      <ThemeToggle variant="floating" />
       <div className="card">
         <h1>English assessment</h1>
         <p className="lede">

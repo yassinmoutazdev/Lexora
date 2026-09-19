@@ -1,7 +1,7 @@
 {
   "section": "writing",
   "contentStatus": "provisional",
-  "statusNote": "The five criteria are approved (PRD FR-WRITE-009) and unchanged in this version. The numeric weights are explicitly TBD in PRD Section 23.1 item 1 — they remain 20/20/20/20/20 here so the scoring formula has a real input, and must be replaced by the team's confirmed weights before the pilot. Do not treat 20/20/20/20/20 as an approved rubric decision. The band descriptors under `bands` remain a first proposal, unchanged in substance from the prior draft, and are the rubric's most calibration-sensitive content; they must be reviewed and confirmed by the team. This version fixes one inconsistency found on review: outputRequirements.fields.corrections now states the five-item cap so the model-facing instructions match the maxCorrections the schema enforces. One spelling inconsistency was deliberately left unchanged: the fixed criterion label uses 'organization' (American) while the rest of this content set uses British spelling. The field descriptions under outputRequirements.fields are NOT provisional placeholders: ContentLoader composes them, together with the task in writing-prompt.json, into the text the model is given, and src/ai/schemas.ts validates the response against exactly the shape they describe. They must be kept in step with that schema.",
+  "statusNote": "The five criteria are approved (PRD FR-WRITE-009) and unchanged in this version. The numeric weights are explicitly TBD in PRD Section 23.1 item 1 — they remain 20/20/20/20/20 here so the scoring formula has a real input, and must be replaced by the team's confirmed weights before the pilot. Do not treat 20/20/20/20/20 as an approved rubric decision. The band descriptors under `bands` remain a first proposal, unchanged in substance from the prior draft, and are the rubric's most calibration-sensitive content; they must be reviewed and confirmed by the team. This version fixes one inconsistency found on review: outputRequirements.fields.corrections now states the five-item cap so the model-facing instructions match the maxCorrections the schema enforces. A later pass reworded that same field: it now tells the model to rank and keep its five best corrections rather than spread thin coverage across error types, and to return fewer than five only when the response genuinely has fewer worth flagging, so a report showing fewer than five corrections can be read as complete rather than truncated. One spelling inconsistency was deliberately left unchanged: the fixed criterion label uses 'organization' (American) while the rest of this content set uses British spelling. The field descriptions under outputRequirements.fields are NOT provisional placeholders: ContentLoader composes them, together with the task in writing-prompt.json, into the text the model is given, and src/ai/schemas.ts validates the response against exactly the shape they describe. They must be kept in step with that schema.",
   "criteria": [
     {
       "key": "grammarAccuracy",
@@ -42,10 +42,26 @@
   },
   "bands": {
     "definitions": [
-      { "name": "Limited", "min": 0, "max": 39 },
-      { "name": "Developing", "min": 40, "max": 59 },
-      { "name": "Competent", "min": 60, "max": 79 },
-      { "name": "Strong", "min": 80, "max": 100 }
+      {
+        "name": "Limited",
+        "min": 0,
+        "max": 39
+      },
+      {
+        "name": "Developing",
+        "min": 40,
+        "max": 59
+      },
+      {
+        "name": "Competent",
+        "min": 60,
+        "max": 79
+      },
+      {
+        "name": "Strong",
+        "min": 80,
+        "max": 100
+      }
     ],
     "descriptors": {
       "grammarAccuracy": {
@@ -88,7 +104,7 @@
       "criteriaScores": "One entry per criterion key, each an object with exactly two fields: \"score\" (the numeric score) and \"rationale\" (a short rationale citing specific evidence from the response). No other fields.",
       "strengths": "An array of short strings: what the response does well.",
       "weaknesses": "An array of short strings: the most important weaknesses.",
-      "corrections": "The most valuable corrections (no more than five), each an object with exactly three fields: \"original\" (the wording as the student wrote it, quoted exactly), \"corrected\" (the wording as it should be), and \"explanation\" (a brief explanation). No other fields.",
+      "corrections": "The five most valuable corrections to show the student, ranked by how much each one would help their writing if fixed — do not stop early because every error type has one example; if the response has more than five things worth correcting, choose the five that matter most and omit the rest rather than spreading coverage thin. Return fewer than five only when the response genuinely contains fewer than five things worth correcting — in that case corrections should be treated as covering everything worth noting, not padded to reach five. Each is an object with exactly three fields: \"original\" (the wording as the student wrote it, quoted exactly), \"corrected\" (the wording as it should be), and \"explanation\" (a brief explanation). No other fields.",
       "suggestions": "An array of short strings: practical suggestions for improvement."
     }
   }

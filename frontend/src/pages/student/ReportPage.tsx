@@ -11,6 +11,7 @@ import {
   type ProcessingStatus,
 } from '../../../../src/shared/types/sections';
 import { ApiError, getReport } from '../../api/client';
+import { ThemeToggle } from '../../components/ThemeToggle';
 import { navigate } from '../../router';
 
 /**
@@ -120,7 +121,8 @@ export function ReportPage() {
 
   if (loadError !== null) {
     return (
-      <main className="page">
+      <main className="page page--toggle">
+        <ThemeToggle variant="floating" />
         <div className="card">
           <h1>We could not load your report</h1>
           <div className="notice" role="alert">
@@ -134,7 +136,8 @@ export function ReportPage() {
 
   if (!report) {
     return (
-      <main className="page">
+      <main className="page page--toggle">
+        <ThemeToggle variant="floating" />
         <div className="card">
           <p className="lede">Loading your report…</p>
         </div>
@@ -160,7 +163,8 @@ export function ReportPage() {
  */
 export function ReportBody({ report }: { report: StudentReport }) {
   return (
-    <main className="page page--wide">
+    <main className="page page--wide page--toggle">
+      <ThemeToggle variant="floating" />
       <div className="card">
         <h1>Your report</h1>
         <p className="lede">
@@ -170,11 +174,18 @@ export function ReportBody({ report }: { report: StudentReport }) {
         </p>
       </div>
 
+      <SummaryStrip report={report} />
+
       <WritingPanel status={report.writingStatus} writing={report.writing} />
 
-      {DETERMINISTIC_SECTION_KEYS.map((section) => (
-        <SectionCard key={section} section={report.deterministic[section]} />
-      ))}
+      <SectionBandsPanel report={report} />
+
+      <div className="card">
+        <h2 className="detail-heading">Question-by-question detail</h2>
+        {DETERMINISTIC_SECTION_KEYS.map((section) => (
+          <SectionDetailPanel key={section} section={report.deterministic[section]} />
+        ))}
+      </div>
 
       <div className="card">
         <p className="hint">
@@ -183,6 +194,45 @@ export function ReportBody({ report }: { report: StudentReport }) {
         </p>
       </div>
     </main>
+  );
+}
+
+/**
+ * Step 1 of the report's reading order: every section's headline number in one glance, before any
+ * detail (FR-FEEDBACK). Grammar/Vocabulary/Reading show as a percentage of their own maximum —
+ * `SectionAggregate.meanPercent`'s per-submission counterpart, the same figure the rest of the page
+ * shows as `score / maxScore` — because a percentage is comparable across sections with different
+ * point totals in a way a raw fraction is not. Writing already reports on a 0–100 scale, so its
+ * overall score doubles as its percentage with no conversion.
+ *
+ * Writing's cell reads "—" rather than a number while its evaluation is still outstanding
+ * (`report.writing === null`): the strip is a glance at what is known right now, and inventing a
+ * score before one exists would contradict `WritingPanel`'s own "still being prepared" message a
+ * few lines below it.
+ */
+function SummaryStrip({ report }: { report: StudentReport }) {
+  return (
+    <div className="card">
+      <div className="summary-strip">
+        {DETERMINISTIC_SECTION_KEYS.map((section) => {
+          const { title, score, maxScore } = report.deterministic[section];
+          const percent = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
+
+          return (
+            <div key={section} className="summary-item">
+              <div className="summary-label">{title}</div>
+              <div className="summary-pct">{percent}%</div>
+            </div>
+          );
+        })}
+        <div className="summary-item">
+          <div className="summary-label">Writing</div>
+          <div className="summary-pct">
+            {report.writing !== null ? `${report.writing.overallScore}%` : '—'}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -319,20 +369,30 @@ function WritingResults({ writing }: { writing: ReportWriting }) {
 
       <ReportList title="What you did well" items={writing.strengths} />
       <ReportList title="What to work on" items={writing.weaknesses} />
-      <CorrectionList corrections={writing.corrections} />
+      <CorrectionList corrections={writing.corrections} maxCorrections={writing.maxCorrections} />
       <ReportList title="Suggestions" items={writing.suggestions} />
     </div>
   );
 }
 
-/** One criterion: its rubric label, its score, and the model's evidence for it (FR-WRITE-005). */
+/**
+ * One criterion: its rubric label, its score, the band that score falls in, and the model's
+ * evidence for it (FR-WRITE-005).
+ *
+ * The band name and its descriptor are shown right under the number because a raw 0–100 score has
+ * no anchor on its own — the same descriptor text the model was calibrated against tells the
+ * student what "62" actually means for this criterion, not just that it is more than 50.
+ */
 function CriterionItem({ criterion }: { criterion: ReportWritingCriterion }) {
   return (
     <li className="criterion">
       <p className="criterion-head">
         <span className="criterion-label">{criterion.label}</span>{' '}
-        <span className="score">{criterion.score} / 100</span>
+        <span className="score">
+          {criterion.score} / 100 <span className="criterion-band">— {criterion.band}</span>
+        </span>
       </p>
+      <p className="report-explanation criterion-band-descriptor">{criterion.bandDescriptor}</p>
       <p className="report-explanation">{criterion.rationale}</p>
     </li>
   );
@@ -368,11 +428,34 @@ function ReportList({ title, items }: { title: string; items: string[] }) {
  * The explanation is a third line rather than a third column: it is a sentence, not a value, and
  * three columns of prose on a phone is a layout nobody reads. Nothing here is a diff — the model
  * returns whole phrases, not character ranges, so the two texts are shown as the two texts.
+ *
+ * ## The completeness note
+ *
+ * `writing-rubric.json` caps `corrections` at `maxCorrections` and, since the reword that shipped
+ * alongside this field, asks the model to return fewer than the cap only when the response genuinely
+ * has fewer things worth flagging. That makes the count itself informative: a list shorter than the
+ * cap is everything worth noting, and a list at the cap may have left some out. Saying so here is
+ * the cheap half of the "corrections shouldn't read as complete when they're not" fix — a student
+ * hitting the cap should not read five corrections as the whole story.
  */
-function CorrectionList({ corrections }: { corrections: ReportWriting['corrections'] }) {
+function CorrectionList({
+  corrections,
+  maxCorrections,
+}: {
+  corrections: ReportWriting['corrections'];
+  maxCorrections: number;
+}) {
+  const atCap = corrections.length > 0 && corrections.length >= maxCorrections;
+
   return (
     <div className="feedback-block">
       <h3>Corrections</h3>
+      {atCap && (
+        <p className="muted">
+          The {corrections.length} most important corrections we found — there may be others in
+          your response beyond these.
+        </p>
+      )}
       {corrections.length === 0 ? (
         <p className="muted">None.</p>
       ) : (
@@ -394,23 +477,61 @@ function CorrectionList({ corrections }: { corrections: ReportWriting['correctio
   );
 }
 
-/** One deterministic section: its score, and every question with what was answered (FR-DET-003/004). */
-function SectionCard({ section }: { section: ReportSection }) {
+/**
+ * Step 3 of the report's reading order: what each deterministic section's score actually means,
+ * from `ContentLoader.bandForSectionScore` / `content/section-bands.json` — the band name plus that
+ * band's own text for this specific section, not a generic definition of the band name in the
+ * abstract. This is the report's only diagnostic text for Grammar/Vocabulary/Reading; there is no
+ * per-skill breakdown, by design (skill/topic labels were tried in an earlier draft and dropped on
+ * review — see `DeterministicScoringService.ts`'s `QuestionScore` doc comment).
+ */
+function SectionBandsPanel({ report }: { report: StudentReport }) {
   return (
     <div className="card">
-      <h2>
-        {section.title}{' '}
-        <span className="score">
-          {section.score} / {section.maxScore}
-        </span>
-      </h2>
+      <h2>What your score means</h2>
+      {DETERMINISTIC_SECTION_KEYS.map((section) => {
+        const { title, score, maxScore, band, bandDescriptor } = report.deterministic[section];
+        const percent = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
 
+        return (
+          <div key={section} className="band-card">
+            <div className="band-head">
+              <span className="band-section-name">
+                {title} — {percent}%
+              </span>
+              <span className="band-pill">{band}</span>
+            </div>
+            <p className="report-explanation">{bandDescriptor}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Step 4 of the report's reading order: the same question-by-question breakdown the report has
+ * always had (FR-DET-003/004), now collapsed behind a disclosure rather than always open — the
+ * summary strip and the band description above already say what a student needs at a glance, so
+ * this is for whoever wants to see the individual questions, not something everyone has to scroll
+ * past to get there.
+ *
+ * Flat, in content order, with no skill grouping — an earlier draft grouped by skill/topic label and
+ * that grouping was explicitly rejected on review; the summary line here (score / max) is the only
+ * per-section number shown before opening it.
+ */
+function SectionDetailPanel({ section }: { section: ReportSection }) {
+  return (
+    <details className="detail-panel">
+      <summary>
+        {section.title} — {section.score} / {section.maxScore} correct
+      </summary>
       <ol className="question-list">
         {section.questions.map((question) => (
           <ReportQuestionItem key={question.questionId} question={question} />
         ))}
       </ol>
-    </div>
+    </details>
   );
 }
 

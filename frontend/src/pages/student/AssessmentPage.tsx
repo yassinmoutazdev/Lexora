@@ -8,6 +8,7 @@ import { SECTION_KEYS, type SectionKey } from '../../../../src/shared/types/sect
 import { ApiError, getDraft, submitAssessment } from '../../api/client';
 import { assessCompleteness } from '../../assessmentCompleteness';
 import { ChoiceQuestions } from '../../components/ChoiceQuestions';
+import { ThemeToggle } from '../../components/ThemeToggle';
 import { useAutosave } from '../../hooks/useAutosave';
 import { navigate } from '../../router';
 import { StudentProblemsSection } from './StudentProblemsSection';
@@ -86,7 +87,8 @@ export function AssessmentPage() {
 
   if (loadError !== null) {
     return (
-      <main className="page">
+      <main className="page page--toggle">
+        <ThemeToggle variant="floating" />
         <div className="card">
           <h1>We could not load your assessment</h1>
           <div className="notice" role="alert">
@@ -103,7 +105,8 @@ export function AssessmentPage() {
 
   if (!draft) {
     return (
-      <main className="page">
+      <main className="page page--toggle">
+        <ThemeToggle variant="floating" />
         <div className="card">
           <p className="lede">Loading your assessment…</p>
         </div>
@@ -151,8 +154,11 @@ function AssessmentWorkspace({
     setAnswers((current) => ({ ...current, studentProblems: next }));
   }
 
+  const isLastSection = position === SECTION_KEYS.length - 1;
+
   return (
-    <main className="page page--wide">
+    <main className="page page--wide page--toggle">
+      <ThemeToggle variant="floating" />
       <div className="card">
         <h1>English assessment</h1>
         <p className="lede">
@@ -192,34 +198,42 @@ function AssessmentWorkspace({
           onUpdateStudentProblems={updateStudentProblems}
           onEditingDone={flush}
         />
+
+        <div className="button-row" style={{ marginTop: '1.5rem' }}>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setActiveSection(neighbourSection(activeSection, -1))}
+            disabled={position === 0}
+          >
+            Previous section
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setActiveSection(neighbourSection(activeSection, 1))}
+            disabled={isLastSection}
+          >
+            Next section
+          </button>
+        </div>
+
+        <p className="progress">
+          Section {position + 1} of {SECTION_KEYS.length}
+        </p>
+
+        <SaveStatus status={status} />
+
+        {/*
+          The submit control has no purpose being visible mid-assessment — a student on Grammar has
+          nothing to submit yet and the list of unfinished sections is just noise this early. It
+          appears only once the student has reached the last section, where "am I ready to submit"
+          is actually the question on screen.
+        */}
+        {isLastSection && (
+          <SubmitControl content={content} answers={answers} onEditingDone={flush} />
+        )}
       </div>
-
-      <div className="button-row">
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => setActiveSection(neighbourSection(activeSection, -1))}
-          disabled={position === 0}
-        >
-          Previous section
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => setActiveSection(neighbourSection(activeSection, 1))}
-          disabled={position === SECTION_KEYS.length - 1}
-        >
-          Next section
-        </button>
-      </div>
-
-      <p className="progress">
-        Section {position + 1} of {SECTION_KEYS.length}
-      </p>
-
-      <SaveStatus status={status} />
-
-      <SubmitControl content={content} answers={answers} onEditingDone={flush} />
     </main>
   );
 }
@@ -279,9 +293,7 @@ function SubmitControl({
   }
 
   return (
-    <div className="card">
-      <h2>Submit your assessment</h2>
-
+    <div className="submit-panel">
       {completeness.complete ? (
         <p>
           Every section is answered. Once you submit, your answers become final — you will not be
