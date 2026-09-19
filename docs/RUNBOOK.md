@@ -18,7 +18,7 @@ as a Blueprint. The equivalent dashboard settings, if the service is created by 
 | Setting | Value |
 | --- | --- |
 | Environment | Node |
-| Build command | `npm ci && npx prisma generate && npm run build && npx prisma migrate deploy` |
+| Build command | `npm ci --include=dev && npx prisma generate && npm run build && npx prisma migrate deploy` |
 | Start command | `node dist/server.js` |
 | Instance type | Free |
 

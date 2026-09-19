@@ -40,7 +40,25 @@ services:
     # additive migrations is survivable and for any other kind is not worth the risk when the fix is
     # one reordering. `migrate deploy` only applies committed migration files and never generates or
     # resets, so it is safe to run unattended.
-    buildCommand: npm ci && npx prisma generate && npm run build && npx prisma migrate deploy
+    # `--include=dev` is load-bearing, and it is here because the first deploy failed without it.
+    #
+    # `NODE_ENV=production` is set below as a *service* variable, which means it is present during
+    # the build as well as at runtime. npm reads that and defaults `omit` to `dev` — so a plain
+    # `npm ci` installs 179 packages and skips every devDependency. `typescript`, `prisma`, and the
+    # whole `@types/*` set all live in `devDependencies`, because that is what they are: build-time
+    # only, absent from the runtime image by design.
+    #
+    # The failure that produces is indirect and unpleasant to read. The build image has a `tsc` of
+    # its own, so the compile still runs; it simply cannot find a declaration file for `express`,
+    # `bcrypt`, or `cookie-session`, and reports ~60 `TS7016`/`TS7006` errors naming source files
+    # rather than anything about installation. Nothing in the output says "a dependency is
+    # missing", which is why this is written down here rather than left to be rediscovered.
+    #
+    # `--include=dev` overrides the `NODE_ENV` default and restores the full install. The cost is
+    # that build-only packages are present in the running container; the alternative — moving the
+    # type packages into `dependencies` — would misdescribe them and ship them to production on
+    # purpose.
+    buildCommand: npm ci --include=dev && npx prisma generate && npm run build && npx prisma migrate deploy
 
     # Section 16's start command verbatim. `npm start` is the same thing and is deliberately not
     # used: naming the artifact means a deploy that forgot to build fails loudly on a missing file
