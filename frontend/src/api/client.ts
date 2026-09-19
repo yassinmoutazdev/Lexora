@@ -1,7 +1,7 @@
 import type { DashboardPayload } from '../../../src/domain/staff/DashboardService';
 import type { DraftAutosaveBody, StudentDraft, StudentReport } from '../../../src/shared/types/draft';
 import type { SectionKey, SubmissionStatus } from '../../../src/shared/types/sections';
-import type { StaffSubmissionDetail } from '../../../src/shared/types/staff';
+import type { StaffCohort, StaffSubmissionDetail } from '../../../src/shared/types/staff';
 
 /**
  * The frontend's typed wrapper over `fetch` (ARCHITECTURE Section 4 — `frontend/src/api/client.ts`).
@@ -492,4 +492,32 @@ function filenameFrom(response: Response): string | undefined {
  */
 export async function getReport(): Promise<StudentReport> {
   return requestJson<StudentReport>('/api/student/report');
+}
+
+/**
+ * Every cohort, with how many submissions point at it (Section 10, FR-STU-001).
+ *
+ * The list exists so a staff member can see which access codes are already in use before handing
+ * out another one, which is why the count travels with the row rather than being fetched per cohort.
+ */
+export async function getStaffCohorts(): Promise<{ cohorts: StaffCohort[] }> {
+  return requestJson<{ cohorts: StaffCohort[] }>('/api/staff/cohorts');
+}
+
+/**
+ * Creates a cohort (Section 10, FR-STU-001).
+ *
+ * The code is sent **as typed**. The server normalises it, and the confirmation dialog previews the
+ * result through `normaliseCohortCode` from `src/shared` — the same function the server stores
+ * with. Sending the already-normalised form would work and would hide the rule from the one screen
+ * where stating it is worth something.
+ */
+export async function createStaffCohort(input: {
+  code: string;
+  name: string;
+}): Promise<{ cohort: StaffCohort }> {
+  return requestJson<{ cohort: StaffCohort }>('/api/staff/cohorts', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }

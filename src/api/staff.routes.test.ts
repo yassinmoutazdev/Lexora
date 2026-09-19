@@ -12,6 +12,7 @@ import {
   getStudentSession,
   studentSessionMiddleware,
 } from '../auth/session.ts';
+import { cohortRepository } from '../data/CohortRepository.ts';
 import { createCohort, createStaffUser, createSubmission, useCleanTestDatabase } from '../test/fixtures.ts';
 import { requireStaffSession } from './middleware/requireStaffSession.ts';
 import { requireStudentSession } from './middleware/requireStudentSession.ts';
@@ -1006,5 +1007,159 @@ describe('the staff session cookie (Section 13)', () => {
       .expect(200);
 
     expect(setCookieFor(direct, STAFF_SESSION_COOKIE)).not.toContain('secure');
+  });
+});
+
+/**
+ * `GET /api/staff/cohorts` and `POST /api/staff/cohorts` (FR-STU-001, ARCHITECTURE Section 10).
+ *
+ * These two routes are the only way a cohort comes into existence outside a seed script, so the
+ * tests are about the code being *usable* rather than merely stored: that it is normalised into the
+ * single form students will be told to type, that a collision is refused rather than producing two
+ * rows nobody can tell apart, and that a cohort created here is immediately resolvable by the exact
+ * lookup a student's entry page performs.
+ *
+ * There is deliberately no test for update or delete — neither route exists, and the reason they do
+ * not is on `CohortRepository`: deleting a cohort with submissions would cascade into immutable
+ * records or have to refuse, and changing a code locks out every student already given it.
+ */
+describe('staff cohort provisioning', () => {
+  // Uses the file's own `createStaff`, so there is one definition of "a staff member exists" rather
+  // than one per describe block.
+  async function signedInStaff() {
+    await createStaff();
+
+    const agent = request.agent(createTestApp());
+    await agent.post('/api/staff/login').send({ email: EMAIL, password: PASSWORD }).expect(200);
+
+    return agent;
+  }
+
+  it('refuses to list cohorts without a staff session', async () => {
+    const response = await request(createTestApp()).get('/api/staff/cohorts').expect(401);
+
+    expect(response.body).toEqual({ error: 'Authentication required' });
+  });
+
+  it('refuses to create a cohort without a staff session', async () => {
+    const response = await request(createTestApp())
+      .post('/api/staff/cohorts')
+      .send({ code: 'NOPE-2026', name: 'Should not exist' })
+      .expect(401);
+
+    expect(response.body).toEqual({ error: 'Authentication required' });
+  });
+
+  it('lists every cohort with its submission count, ordered by code', async () => {
+    const agent = await signedInStaff();
+
+    const beta = await createCohort({ code: 'BETA-2026', name: 'Beta' });
+    await createCohort({ code: 'ALPHA-2026', name: 'Alpha' });
+    await createSubmission(beta.id);
+    await createSubmission(beta.id);
+
+    const response = await agent.get('/api/staff/cohorts').expect(200);
+
+    expect(response.body.cohorts.map((cohort: { code: string }) => cohort.code)).toEqual([
+      'ALPHA-2026',
+      'BETA-2026',
+    ]);
+
+    const [alpha, betaRow] = response.body.cohorts;
+    // A cohort nobody has touched reads as zero rather than as a missing field — the difference
+    // between "no students yet" and "this page failed to count" has to be visible.
+    expect(alpha.submissionCount).toBe(0);
+    expect(betaRow.submissionCount).toBe(2);
+    expect(betaRow.name).toBe('Beta');
+    expect(typeof betaRow.createdAt).toBe('string');
+  });
+
+  it('creates a cohort and returns it', async () => {
+    const agent = await signedInStaff();
+
+    const response = await agent
+      .post('/api/staff/cohorts')
+      .send({ code: 'AUTUMN-2026', name: 'Autumn intake' })
+      .expect(201);
+
+    expect(response.body.cohort.code).toBe('AUTUMN-2026');
+    expect(response.body.cohort.name).toBe('Autumn intake');
+    expect(response.body.cohort.submissionCount).toBe(0);
+  });
+
+  it('normalises the code to the single form students will be told to type', async () => {
+    const agent = await signedInStaff();
+
+    const response = await agent
+      .post('/api/staff/cohorts')
+      .send({ code: '  spring-2027  ', name: '  Spring intake  ' })
+      .expect(201);
+
+    // Upper-cased and trimmed. `findByCode` matches exactly, so whatever is stored is what every
+    // student has to type character for character — the normalisation is what keeps that from
+    // depending on how a staff member happened to type it.
+    expect(response.body.cohort.code).toBe('SPRING-2027');
+    // The name is a label a person reads, not a value a student types: trimmed, otherwise as given.
+    expect(response.body.cohort.name).toBe('Spring intake');
+  });
+
+  it('stores a code the student entry lookup resolves, unchanged', async () => {
+    const agent = await signedInStaff();
+    await agent.post('/api/staff/cohorts').send({ code: 'resolvable-1', name: 'Resolvable' }).expect(201);
+
+    // The exact call `StudentIdentityService` makes when a student types an access code.
+    const found = await cohortRepository.findByCode('RESOLVABLE-1');
+
+    expect(found).not.toBeNull();
+    expect(found?.name).toBe('Resolvable');
+  });
+
+  it('refuses a code that already exists, and quotes the form that collided', async () => {
+    const agent = await signedInStaff();
+    await createCohort({ code: 'TAKEN-2026', name: 'First' });
+
+    const response = await agent
+      .post('/api/staff/cohorts')
+      .send({ code: 'TAKEN-2026', name: 'Second' })
+      .expect(409);
+
+    expect(response.body).toEqual({ error: 'A cohort with the code "TAKEN-2026" already exists' });
+  });
+
+  it('refuses a code that differs from an existing one only in case', async () => {
+    const agent = await signedInStaff();
+    await createCohort({ code: 'MIXED-2026', name: 'First' });
+
+    // The refusal quotes the upper-cased form, which is the whole point: a staff member who typed
+    // lowercase is told which code it actually collided with, rather than being left to guess.
+    const response = await agent
+      .post('/api/staff/cohorts')
+      .send({ code: 'mixed-2026', name: 'Second' })
+      .expect(409);
+
+    expect(response.body).toEqual({ error: 'A cohort with the code "MIXED-2026" already exists' });
+  });
+
+  it('rejects a blank code or name with a field-level 400', async () => {
+    const agent = await signedInStaff();
+
+    const response = await agent
+      .post('/api/staff/cohorts')
+      .send({ code: '   ', name: '' })
+      .expect(400);
+
+    expect(response.body.error).toBe('Invalid request body');
+    expect(response.body.details.map((detail: { field: string }) => detail.field).sort()).toEqual([
+      'code',
+      'name',
+    ]);
+  });
+
+  it('rejects a body with a field missing entirely', async () => {
+    const agent = await signedInStaff();
+
+    const response = await agent.post('/api/staff/cohorts').send({ code: 'ONLY-CODE' }).expect(400);
+
+    expect(response.body.details[0].field).toBe('name');
   });
 });

@@ -1,4 +1,11 @@
-import { LayoutDashboard, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import {
+  LayoutDashboard,
+  ListChecks,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Users,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { staffLogout } from '../api/client';
@@ -51,7 +58,7 @@ export function StaffLayout({
   title,
   children,
 }: {
-  activeItem: 'dashboard' | 'submissions';
+  activeItem: 'dashboard' | 'submissions' | 'cohorts';
   title: string;
   children: ReactNode;
 }) {
@@ -113,6 +120,15 @@ export function StaffLayout({
         >
           <ListChecks aria-hidden="true" />
           Submissions
+        </Link>
+        <Link
+          to="/staff/cohorts"
+          className="staff-nav-item"
+          aria-current={activeItem === 'cohorts' ? 'true' : undefined}
+          tabIndex={collapsed ? -1 : undefined}
+        >
+          <Users aria-hidden="true" />
+          Cohorts
         </Link>
 
         <div className="staff-sidebar-footer">

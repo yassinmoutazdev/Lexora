@@ -161,3 +161,25 @@ export type StaffSubmissionDetail = {
     textDerived: StaffDerivedProblemsText | null;
   };
 };
+
+/**
+ * One cohort as the staff cohorts page sees it.
+ *
+ * Assembled by the route from a row plus a relation count, which is why it is here rather than with
+ * `CohortService`: the service decides *which* cohorts and what the count means, and the route is
+ * what turns `CohortWithSubmissionCount` into the shape the browser is promised. That is the same
+ * split `StaffSubmissionDetail` follows.
+ *
+ * `createdAt` is an ISO string rather than a `Date` because it crosses the wire as JSON. The
+ * frontend has no use for it today; it is carried because a list of access codes with no sense of
+ * which are recent is a list a staff member has to read in full to find the one they just made.
+ */
+export type StaffCohort = {
+  id: string;
+  /** The access code students type, exactly as stored. */
+  code: string;
+  name: string;
+  /** How many submissions point at this cohort — draft or submitted alike. */
+  submissionCount: number;
+  createdAt: string;
+};

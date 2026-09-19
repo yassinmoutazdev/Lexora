@@ -62,6 +62,35 @@ DATABASE_URL="<supabase-url>" npx prisma migrate status
 
 ---
 
+### Provisioning a staff account
+
+Migrations build the schema and insert nothing, and `prisma/seed.ts` is a development convenience
+that a deploy never runs. **A freshly deployed instance therefore has no staff account at all** —
+nobody can log in until this step has been done once. `FR-STAFF-002` requires staff accounts to be
+created manually, and this is that manual step.
+
+```bash
+DATABASE_URL="<supabase-url>" node prisma/provision.ts
+```
+
+It prompts for the email and the password (the password is not echoed), prints the host and database
+it is about to write to, and asks for confirmation before writing anything.
+
+- **Idempotent.** The account is upserted by email, so re-running it rotates the password rather than
+  colliding. This is also the only password-recovery path there is — there is no self-service reset,
+  deliberately.
+- **`DATABASE_URL` must be given on the command line.** The script deliberately does not read `.env`
+  — `@prisma/client` loads it on import, so the script reads the variable *before* loading the client
+  and refuses outright if it is unset. Without that ordering it would silently target the local
+  development database.
+- **Always confirm the printed target.** The confirmation step exists because an explicit connection
+  string can still be the wrong one.
+
+Cohorts are created in the application, at `/staff/cohorts`, by a signed-in staff member. With no
+cohort existing, no student can start the assessment — the entry form will reject every code.
+
+---
+
 ## Logs
 
 Structured JSON on stdout, captured by Render's log viewer (Section 16). Every line comes from the one

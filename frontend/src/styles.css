@@ -1653,6 +1653,21 @@ details.detail-panel .question-list {
   }
 }
 
+/*
+  Below ~375px, `.problem-rank-summary`'s row (position circle + label + 5.5rem bar + mean, each
+  with `flex-shrink: 0` except the label) has less room than its fixed-width children need: inside
+  `.ai-panel`'s own padding, a full-length area label like "Learning habits and exposure" has nowhere
+  left to shrink to and the row overflows its card rather than wrapping (flex items don't wrap onto a
+  second line by default). The bar is decorative — `.problem-rank-mean` already states the same
+  number — so it drops here rather than reflowing, the same call this file already makes for
+  `.staff-footer-note` at the equivalent width: cut the decoration, keep the figure.
+*/
+@media (max-width: 26rem) {
+  .problem-rank-bar-track {
+    display: none;
+  }
+}
+
 /* ---------------------------------------------------------------- dashboard: KPI strip */
 
 /*
@@ -2637,4 +2652,80 @@ details.ai-detail[open] summary::before {
 */
 .writing-arrival {
   animation: section-enter var(--motion-base) var(--ease-standard);
+}
+
+/* ---------------------------------------------------------------- cohorts */
+
+/*
+  The access-code list (see `CohortsPage`).
+
+  Ordered the way the server orders it — by code — and laid out so the code is the first thing a
+  reader's eye lands on, because it is the only value on this page that gets read aloud and typed
+  back. The description and the count are context for it and sit at lower weight.
+
+  The count is `tabular-nums` like every other number in a column in this system, so the digits line
+  up and a value does not shift as it changes.
+*/
+.cohort-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.cohort-row {
+  display: grid;
+  grid-template-columns: 11rem 1fr auto;
+  align-items: baseline;
+  gap: 0.9rem;
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.cohort-row:first-child {
+  border-top: none;
+}
+
+.cohort-code {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.cohort-name {
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+.cohort-count {
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/*
+  The code inside a notice or the confirmation dialog — the one place it is set large.
+
+  Written against the notice's own `p` rule rather than as a bare `.cohort-code`, because
+  `.notice p` carries a class and an element and would otherwise win the cascade, leaving the code
+  the same size and colour as the sentence introducing it. Specificity here is deliberate, not
+  incidental.
+*/
+.notice p.cohort-code,
+.confirm-dialog-body p.cohort-code {
+  margin: 0.4rem 0 0.6rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+
+@media (max-width: 40rem) {
+  .cohort-row {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+
+  .cohort-count {
+    text-align: start;
+  }
 }

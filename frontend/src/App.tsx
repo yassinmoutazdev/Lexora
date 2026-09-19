@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { CohortsPage } from './pages/staff/CohortsPage';
 import { DashboardPage } from './pages/staff/DashboardPage';
 import { LoginPage } from './pages/staff/LoginPage';
 import { SubmissionDetailPage } from './pages/staff/SubmissionDetailPage';
@@ -41,6 +42,7 @@ const ROUTE_TITLES: Record<string, string> = {
   '/staff/login': 'Staff login',
   '/staff/dashboard': 'Assessment dashboard',
   '/staff/submissions': 'Submissions',
+  '/staff/cohorts': 'Cohorts',
 };
 
 /** The document title for a pathname — always suffixed, so a tab is identifiable at a glance. */
@@ -147,6 +149,9 @@ export function App() {
 
     case '/staff/submissions':
       return <SubmissionsPage />;
+
+    case '/staff/cohorts':
+      return <CohortsPage />;
 
     default:
       return <NotFound pathname={pathname} />;

@@ -17,10 +17,12 @@ import {
   submissionRepository,
   type ExportSubmission,
 } from '../data/SubmissionRepository.ts';
+import { getCohortService } from '../domain/staff/CohortService.ts';
 import { getDashboardService } from '../domain/staff/DashboardService.ts';
 import { getStaffAuthService } from '../domain/staff/StaffAuthService.ts';
 import type { DraftAnswers } from '../shared/types/draft.ts';
 import type {
+  StaffCohort,
   StaffProblemResponse,
   StaffSubmissionDetail,
   StaffWritingCriterion,
@@ -823,3 +825,89 @@ function asCorrectionArray(value: unknown): WritingCorrection[] {
       : [];
   });
 }
+
+/**
+ * Cohort provisioning (FR-STU-001, ARCHITECTURE Section 10).
+ *
+ * ## Why these two endpoints exist
+ *
+ * Every student reaches the assessment by typing an access code (PRD Section 8.1 step 2), and until
+ * now nothing in the product could create one: the only code that had ever existed was the one
+ * `prisma/seed.ts` writes into a *development* database. Production runs migrations and nothing else
+ * (Section 16), so a deployed instance starts with no cohorts at all and every student would be told
+ * "we couldn't find a matching record".
+ *
+ * Two routes, and deliberately only two. There is no update and no delete: changing a `code` locks
+ * out every student already given the old one, and deleting a cohort either cascades into immutable
+ * submissions or has to refuse — both need guardrails designed before they need endpoints. Creating
+ * a code and seeing which exist is the whole of what provisioning requires.
+ *
+ * ## Authorization
+ *
+ * `requireStaffSession` on both, like every staff route but login. FR-STAFF-003 leaves one
+ * permission level in the MVP, so there is no finer gate to apply — creating a cohort is a staff
+ * action because being staff is the only role there is. `requireSameOrigin` covers the POST
+ * globally, before this router is reached.
+ */
+const createCohortBodySchema = z.object({
+  code: requiredText('code'),
+  name: requiredText('name'),
+});
+
+/**
+ * The refusal for an access code that already exists.
+ *
+ * Quotes the **normalised** code rather than the submitted one, because that is the form that
+ * collided and the form students will have to type. A staff member who entered `pilot-2027` and is
+ * told `PILOT-2027` already exists has learned the rule that caught them, which is the difference
+ * between a refusal they can act on and one they retry unchanged.
+ */
+function duplicateCohortCodeMessage(code: string): string {
+  return `A cohort with the code "${code}" already exists`;
+}
+
+/** A cohort row as the browser is promised it. */
+function toStaffCohort(cohort: Cohort, submissionCount: number): StaffCohort {
+  return {
+    id: cohort.id,
+    code: cohort.code,
+    name: cohort.name,
+    submissionCount,
+    createdAt: cohort.createdAt.toISOString(),
+  };
+}
+
+staffRouter.get('/cohorts', requireStaffSession, async (_req, res, next) => {
+  try {
+    const cohorts = await getCohortService().listCohorts();
+
+    res.status(200).json({
+      cohorts: cohorts.map((cohort) => toStaffCohort(cohort, cohort.submissionCount)),
+    });
+  } catch (error) {
+    // Express 4 does not forward rejections from an async handler on its own.
+    next(error);
+  }
+});
+
+staffRouter.post(
+  '/cohorts',
+  requireStaffSession,
+  validateBody(createCohortBodySchema),
+  async (req, res, next) => {
+    try {
+      const result = await getCohortService().createCohort(req.body as { code: string; name: string });
+
+      if (result.outcome === 'duplicate_code') {
+        res.status(409).json({ error: duplicateCohortCodeMessage(result.code) });
+        return;
+      }
+
+      // 201, and a brand-new cohort has no submissions by definition — stating the zero rather than
+      // omitting the field keeps the created row and a listed row the same shape to the client.
+      res.status(201).json({ cohort: toStaffCohort(result.cohort, 0) });
+    } catch (error) {
+      next(error);
+    }
+  },
+);

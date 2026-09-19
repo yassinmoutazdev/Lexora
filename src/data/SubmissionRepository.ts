@@ -1,5 +1,6 @@
 import type { Prisma, ProcessingStatus, Submission, SubmissionStatus } from '@prisma/client';
 import { JOB_TYPES, isJobType, type JobType } from '../domain/jobs/jobTypes.ts';
+import { isUniqueConstraintViolation } from './prismaErrors.ts';
 import { getPrismaClient } from './prismaClient.ts';
 
 /**
@@ -524,15 +525,6 @@ export type SectionMergeResult =
 export type ExportSubmission = Submission & {
   cohort: { code: string; name: string };
 };
-
-/** Whether an error is Postgres' unique-constraint violation as Prisma reports it. */function isUniqueConstraintViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === 'P2002'
-  );
-}
 
 /** The process-wide repository instance. */
 export const submissionRepository = new SubmissionRepository();

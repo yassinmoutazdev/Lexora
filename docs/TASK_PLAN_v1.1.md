@@ -1169,11 +1169,55 @@ model is a named failure that says which model was requested.
 
 ---
 
+## Epic 11 — Cohort Provisioning (post-v1.1 addition)
+
+**Status:** complete. **This is a scope expansion, not a task the plan already contained**, and it is
+recorded here rather than folded in silently. The PRD does not describe cohort management.
+
+It exists because a deployed instance had **no cohorts at all**: `render.yaml` runs
+`prisma migrate deploy` and nothing else, no migration inserts data, and `prisma/seed.ts` is a
+development convenience a deploy never runs. Every student would have been told "we couldn't find a
+matching record". The full argument, and why this clears Section 10's "one endpoint per real user
+action" standard, is in ARCHITECTURE Section 9's amendment.
+
+**Create-and-read only, deliberately.** There is no update and no delete: changing a cohort's `code`
+locks out every student already given it, and deleting one either cascades into immutable
+submissions (which the product forbids) or has to refuse once a submission exists.
+
+**Staff accounts remain non-creatable in-app**, per FR-STAFF-002. `prisma/provision.ts` is the manual
+step made repeatable, not a route.
+
+### Feature 11.1 — Cohort provisioning
+
+- [x] T11.1.1 — Add `create` and `findAllWithSubmissionCounts` to `CohortRepository`, and a `CohortService` owning the uniqueness decision and the code-normalisation rule.
+      Ref: ARCHITECTURE Section 10, Section 18; PRD Section 9.1 (FR-STU-001)
+      Output: repository + service · exercised through the route suite
+- [x] T11.1.2 — Add `GET /api/staff/cohorts` and `POST /api/staff/cohorts`, both behind `requireStaffSession`, refusing a duplicate code with `409` and a malformed body with a field-level `400`.
+      Ref: ARCHITECTURE Section 9 (amendment), Section 10, Section 11
+      Output: integration tests · 10 cases pass (auth on both, ordering, counts, normalisation, exact and case-insensitive duplicates, blank and missing fields)
+- [x] T11.1.3 — Add the `/staff/cohorts` page, a third sidebar item, and a creation confirmation dialog that shows the code students will be given.
+      Ref: ARCHITECTURE Section 9; DESIGN.md
+      Output: page renders inside the staff shell · create flow verified end to end
+- [x] T11.1.4 — Extract `normaliseCohortCode` to `src/shared/cohortCode.ts` so the dialog's preview and the stored value cannot disagree, and move `isUniqueConstraintViolation` to `src/data/prismaErrors.ts` so two repositories share one definition rather than each holding a copy.
+      Ref: CLAUDE.md ("A rule implemented in two places is a bug")
+      Output: one definition of each, imported by every caller
+
+### Feature 11.2 — Staff account provisioning
+
+- [x] T11.2.1 — Add `prisma/provision.ts`: upserts one staff account against an explicitly-named `DATABASE_URL`, prompting for the password without echoing it and confirming the target database before writing.
+      Ref: PRD Section 9.7 (FR-STAFF-002); ARCHITECTURE Section 16
+      Output: verified four ways — refuses when `DATABASE_URL` is unset, the stored hash verifies against the verifier `StaffAuthService` uses, re-running rotates the password instead of duplicating the row, and declining the confirmation writes nothing
+- [x] T11.2.2 — Document the procedure in `docs/RUNBOOK.md`, which had no provisioning section at all — the reason this gap was invisible until it was asked about.
+      Ref: ARCHITECTURE Section 16
+      Output: runbook section added, covering the idempotency, the `.env` ordering, and the cohort step that follows
+
+---
+
 ## Final Verification Checklist
 
 Before declaring the MVP complete, confirm:
 
-- [ ] All 90 tasks across all 10 Epics are checked off.
+- [ ] All tasks across Epics 1–10 are checked off, plus Epic 11 (a post-v1.1 addition — see its own note on why it is a scope expansion rather than a planned task).
 - [ ] `npm test` (backend) and the frontend build both pass with no known failures.
 - [ ] Every PRD functional requirement (FR-STU, FR-ASSESS, FR-DET, FR-WRITE, FR-PROB, FR-FEEDBACK, FR-STAFF, FR-CONTENT) has at least one implementation or verification task above.
 - [ ] Every PRD edge case (EDGE-001 through EDGE-008) is covered by an implementation task (E4/E5/E7) or a verification task (E10).

@@ -563,6 +563,7 @@ There is deliberately **no** `/report/:id` or any route parameter that identifie
 | `/staff/dashboard` | Aggregate views, cohort filter | Requires staff session |
 | `/staff/submissions` | The submissions list, as clickable cards into each record | Requires staff session |
 | `/staff/submissions/:submissionId` | Individual submission detail | Requires staff session; every access is logged server-side via structured application logging (Section 13) |
+| `/staff/cohorts` | Cohort provisioning: create an access code, and list the ones that exist | Requires staff session |
 | `/staff/export` | CSV export | Requires staff session |
 
 **Amendment — `/staff/submissions` (added after v1.1).** The staff sidebar has carried a second nav
@@ -574,6 +575,31 @@ action"*, and `GET /api/staff/dashboard` already returns the rows the list needs
 (`recentSubmissions`). The page therefore renders part of an existing payload, and inherits its
 bound — the 25 most recent submissions — which it states on the page rather than hiding. `FR-STAFF-010`
 was already satisfied without this route; this is a navigation fix, not a new capability.
+
+**Amendment — `/staff/cohorts` and the two endpoints behind it (added after v1.1).** This one is a
+genuine scope expansion rather than a navigation fix, and is recorded as such. Every student reaches
+the assessment by typing an access code (PRD Section 8.1 step 2), and until this route existed
+nothing in the product could create one outside `prisma/seed.ts` — which is a development
+convenience that production deliberately never runs (Section 16 runs migrations and nothing else, and
+no migration inserts data). A deployed instance therefore had **no cohorts at all**, and every
+student would have been told "we couldn't find a matching record".
+
+The PRD does not describe cohort management, and Section 10's "one endpoint per real user action"
+is the standard this had to clear. It clears it on the same grounds the dashboard does: a staff
+member provisioning a pilot has a real action to perform and no other way to perform it. The
+alternative — provisioning every cohort by hand against the production database — is an operational
+procedure with no place in the product, and one that puts a credential-carrying connection string in
+front of whoever needs to add a group.
+
+**Create and read only.** There is no update and no delete, and neither is an omission to be
+corrected later without thought. Changing a cohort's `code` locks out every student already given
+the old one — it is the student's only identifier — and deleting a cohort either cascades into
+immutable submissions, which the product forbids, or has to refuse once one exists. Both need
+guardrails designed before they need endpoints.
+
+**Staff accounts are still not creatable in-app.** `FR-STAFF-002` requires them to be created
+manually by the team, and `prisma/provision.ts` is that manual step made repeatable. It is a script
+run against an explicitly-named database, not a route, and that distinction is the requirement.
 
 **Session behavior:** two independent cookie-based sessions exist — a staff session (longer-lived, e.g. 8 hours, since staff return to the dashboard repeatedly) and a student session (short-lived, e.g. 30 minutes of inactivity, re-established trivially by re-entering identity). Neither session type grants access to the other's routes; middleware (`requireStaffSession` / `requireStudentSession`) is applied per router, not globally, so the two access boundaries can never be accidentally merged.
 
@@ -592,6 +618,8 @@ Deliberately small — one endpoint per real user action, not one per theoretica
 | `/api/student/report` | GET | Current submission state: deterministic scores, writing status/result | Student session |
 | `/api/staff/login` | POST | Staff email/password login | Public, rate-limited |
 | `/api/staff/logout` | POST | Clear staff session | Staff session |
+| `/api/staff/cohorts` | GET | Every cohort with its submission count, ordered by code | Staff session |
+| `/api/staff/cohorts` | POST | Create a cohort (FR-STU-001); `409` if the code is taken | Staff session |
 | `/api/staff/dashboard` | GET | Aggregate metrics, filterable by cohort | Staff session |
 | `/api/staff/submissions/:id` | GET | Individual submission detail; logs staff access (Section 13) | Staff session |
 | `/api/staff/export.csv` | GET | Streamed CSV, optionally filtered by cohort | Staff session |

@@ -16,6 +16,7 @@
     "build:backend": "tsc -p tsconfig.build.json",
     "build:frontend": "tsc -p frontend/tsconfig.json && vite build --config frontend/vite.config.ts",
     "start": "node dist/server.js",
+    "provision": "node prisma/provision.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "npm run typecheck:backend && npm run typecheck:frontend",
