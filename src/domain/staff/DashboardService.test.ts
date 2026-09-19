@@ -289,6 +289,54 @@ describe('DashboardService — most common Student Problems responses (FR-STAFF-
     expect(sp02?.mostCommon).toEqual({ value: 3, label: 'Neutral', count: 2 });
   });
 
+  it('pools every statement in a problem area into one ranked figure, not per statement', async () => {
+    const cohort = await createCohort();
+
+    // sp-01, sp-02, sp-03 are all `speaking_confidence`; sp-04 is `listening` (a different area).
+    // sp-01 answered 5, 5, 2; sp-02 answered 3, 3; sp-04 answered 5 once — a high single-statement
+    // mean on one response, to confirm pooling by responses does not let it outrank a real area.
+    await createSubmission(cohort.id, {
+      status: 'submitted',
+      problemsLikertAnswers: { 'sp-01': 5, 'sp-02': 3, 'sp-04': 5 },
+      problemsTextStatus: 'not_applicable',
+    });
+    await createSubmission(cohort.id, {
+      status: 'submitted',
+      problemsLikertAnswers: { 'sp-01': 5, 'sp-02': 3 },
+      problemsTextStatus: 'not_applicable',
+    });
+    await createSubmission(cohort.id, {
+      status: 'submitted',
+      problemsLikertAnswers: { 'sp-01': 2 },
+      problemsTextStatus: 'not_applicable',
+    });
+
+    const payload = await dashboard(cohort.id);
+
+    const speaking = payload.problems.areas.find((entry) => entry.area === 'speaking_confidence');
+    expect(speaking).toBeDefined();
+    expect(speaking?.areaLabel).toBe('Speaking and confidence');
+    // sp-01 (3 responses) + sp-02 (2 responses) pooled — sp-03 contributes nothing, unanswered.
+    // The total is read back out of the pooled distribution rather than from a field of its own:
+    // the aggregate carries `counts` and the mean built from them, and a separate response count
+    // alongside those was a third spelling of the same number that nothing rendered.
+    expect(speaking?.counts.reduce((total, count) => total + count.count, 0)).toBe(5);
+    // (5 + 5 + 2 + 3 + 3) / 5 = 3.6, rounded by the same `round` helper the rest of the module uses.
+    expect(speaking?.mean).toBeCloseTo(3.6, 5);
+    expect(speaking?.counts.find((count) => count.value === 5)?.count).toBe(2);
+    expect(speaking?.counts.find((count) => count.value === 3)?.count).toBe(2);
+
+    const listening = payload.problems.areas.find((entry) => entry.area === 'listening');
+    expect(listening?.counts.reduce((total, count) => total + count.count, 0)).toBe(1);
+    expect(listening?.mean).toBe(5);
+
+    // Worst (highest mean) first — a single response of 5 does not outrank a real, well-supported
+    // area just because it has fewer responses to average down.
+    expect(speaking?.mean).toBeLessThan(listening?.mean ?? 0);
+    const rankedAreas = payload.problems.areas.map((entry) => entry.area);
+    expect(rankedAreas.indexOf('listening')).toBeLessThan(rankedAreas.indexOf('speaking_confidence'));
+  });
+
   it('keeps the AI-derived categories out of the statements the students answered', async () => {
     const cohort = await createCohort();
 

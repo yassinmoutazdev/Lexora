@@ -1,3 +1,4 @@
+import { Eye, EyeOff } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiError, describeRefusal, staffLogin } from '../../api/client';
@@ -21,6 +22,14 @@ import { Link, navigate } from '../../router';
  * the two was wrong, so there is no field to attach it to and it is shown once, above the form.
  * Both are rendered exactly as the server worded them: the message lives on the server, and a
  * second copy here would be a second thing to keep in step with it.
+ *
+ * ## The password visibility toggle
+ *
+ * `type="text"`/`type="password"` is swapped locally in this component's own state — never sent
+ * anywhere, never persisted — so revealing the password on this one page has no effect beyond it.
+ * The button is `tabIndex={-1}` and not part of the field's tab order: it is a convenience for
+ * proofreading what was typed, not a stop on the way to the submit button, and keeping it out of
+ * tab order means Enter-to-submit from the password field still works exactly as it did before.
  *
  * ## Where success goes
  *
@@ -58,6 +67,9 @@ export function LoginPage() {
   const [fieldIssues, setFieldIssues] = useState<FieldIssues>({});
   const [refusal, setRefusal] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Off by default: a staff member's screen may be shared or glanced at, and the field should start
+  // masked the same way any password field does — this only reveals it on the person's own request.
+  const [passwordVisible, setPasswordVisible] = useState(false);
 
   /** The notice, so a credential refusal can be moved to rather than only announced. */
   const notice = useRef<HTMLDivElement>(null);
@@ -143,21 +155,36 @@ export function LoginPage() {
             return (
               <div key={field.name} className={`field${issue ? ' field--invalid' : ''}`}>
                 <label htmlFor={field.name}>{field.label}</label>
-                <input
-                  id={field.name}
-                  name={field.name}
-                  type={field.type}
-                  value={values[field.name]}
-                  onChange={(event) => update(field.name, event.target.value)}
-                  aria-describedby={issue ? `${field.name}-error` : undefined}
-                  aria-invalid={issue ? true : undefined}
-                  autoFocus={field.first}
-                  autoComplete={field.autoComplete}
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  disabled={submitting}
-                />
+                <div className={field.name === 'password' ? 'field-with-toggle' : undefined}>
+                  <input
+                    id={field.name}
+                    name={field.name}
+                    type={field.name === 'password' && passwordVisible ? 'text' : field.type}
+                    value={values[field.name]}
+                    onChange={(event) => update(field.name, event.target.value)}
+                    aria-describedby={issue ? `${field.name}-error` : undefined}
+                    aria-invalid={issue ? true : undefined}
+                    autoFocus={field.first}
+                    autoComplete={field.autoComplete}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    disabled={submitting}
+                  />
+                  {field.name === 'password' && (
+                    <button
+                      type="button"
+                      className="field-toggle"
+                      onClick={() => setPasswordVisible((visible) => !visible)}
+                      disabled={submitting}
+                      aria-label={passwordVisible ? 'Hide password' : 'Show password'}
+                      aria-pressed={passwordVisible}
+                      tabIndex={-1}
+                    >
+                      {passwordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  )}
+                </div>
                 {issue && (
                   <p className="field-error" id={`${field.name}-error`}>
                     {issue}

@@ -1,9 +1,18 @@
-import { LayoutDashboard, ListChecks, LogOut } from 'lucide-react';
-import { useState } from 'react';
+import { LayoutDashboard, ListChecks, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { staffLogout } from '../api/client';
 import { Link, navigate } from '../router';
 import { ThemeToggle } from './ThemeToggle';
+
+/** The stored collapse preference's key, following `ThemeToggle`'s `lexora-theme` convention. */
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'lexora-staff-sidebar-collapsed';
+
+function readStoredCollapsed(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true';
+}
 
 /**
  * The staff application shell (spec Section 5 — "fixed, collapsible sidebar for primary
@@ -23,9 +32,19 @@ import { ThemeToggle } from './ThemeToggle';
  * They did not previously, which meant the sidebar vanished exactly when something had gone wrong —
  * see the note on `DashboardPage`'s shell states.
  *
- * This patch does not build the collapse interaction itself (the spec only fixes that the sidebar
- * *can* collapse, not when); the class is named so that behavior is a follow-up rather than a
- * rename.
+ * ## Collapse
+ *
+ * The sidebar can now actually collapse — the earlier version fixed only the class name for this,
+ * not the interaction (see the git history of this comment). The toggle lives in the topbar rather
+ * than inside the sidebar itself, because collapsing the sidebar is exactly the moment its own
+ * controls become unreachable; a button that only exists inside the thing it opens cannot reopen it.
+ * `.staff-content` needs no explicit resizing rule for this: it is `flex: 1` inside `.staff-shell`,
+ * so it fills whatever width `.staff-sidebar` gives up.
+ *
+ * The preference persists in `localStorage`, same mechanism and reasoning as `ThemeToggle`'s theme
+ * choice, so it survives a reload and is not something each page has to thread through as state.
+ * Read here rather than by the caller: a route change back to a staff page should not silently
+ * re-expand a sidebar the person collapsed.
  */
 export function StaffLayout({
   activeItem,
@@ -36,15 +55,52 @@ export function StaffLayout({
   title: string;
   children: ReactNode;
 }) {
+  const [collapsed, setCollapsed] = useState<boolean>(readStoredCollapsed);
+
+  useEffect(() => {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
+  }, [collapsed]);
+
+  /*
+    Signing out is owned here rather than inside the button that starts it.
+
+    The failure has to be visible whether or not the sidebar is collapsed, and a message rendered
+    inside a container that can animate to `width: 0` with `overflow: hidden` is a message that can
+    be hidden by the thing it is warning about. Lifting the state puts the notice in the content
+    area, which the collapse cannot reach — and puts the action itself somewhere a second control
+    (the notice's own "Try again") can call it too, without two copies of the request.
+  */
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    setSignOutFailed(false);
+
+    try {
+      await staffLogout();
+      navigate('/staff/login', { replace: true });
+    } catch {
+      setSignOutFailed(true);
+      setSigningOut(false);
+    }
+  }
+
   return (
-    <div className="staff-shell">
-      <nav className="staff-sidebar" aria-label="Staff navigation">
+    <div className={collapsed ? 'staff-shell staff-shell--collapsed' : 'staff-shell'}>
+      <nav
+        id="staff-sidebar"
+        className="staff-sidebar"
+        aria-label="Staff navigation"
+        aria-hidden={collapsed}
+      >
         <div className="brand">Lexora</div>
 
         <Link
           to="/staff/dashboard"
           className="staff-nav-item"
           aria-current={activeItem === 'dashboard' ? 'true' : undefined}
+          tabIndex={collapsed ? -1 : undefined}
         >
           <LayoutDashboard aria-hidden="true" />
           Dashboard
@@ -53,13 +109,14 @@ export function StaffLayout({
           to="/staff/submissions"
           className="staff-nav-item"
           aria-current={activeItem === 'submissions' ? 'true' : undefined}
+          tabIndex={collapsed ? -1 : undefined}
         >
           <ListChecks aria-hidden="true" />
           Submissions
         </Link>
 
         <div className="staff-sidebar-footer">
-          <SignOut />
+          <SignOutButton collapsed={collapsed} signingOut={signingOut} onSignOut={handleSignOut} />
           <p className="staff-footer-note">Lexora pilot</p>
         </div>
       </nav>
@@ -75,11 +132,44 @@ export function StaffLayout({
       */}
       <main className="staff-main">
         <div className="staff-topbar">
+          <button
+            type="button"
+            className="sidebar-toggle"
+            onClick={() => setCollapsed((value) => !value)}
+            aria-expanded={!collapsed}
+            aria-controls="staff-sidebar"
+          >
+            {collapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+            <span className="sr-only">{collapsed ? 'Show sidebar' : 'Hide sidebar'}</span>
+          </button>
           <h1>{title}</h1>
           <ThemeToggle />
         </div>
 
-        <div className="staff-content">{children}</div>
+        <div className="staff-content">
+          {/*
+            Here, not in the sidebar. This is the one message in the shell that must survive the
+            sidebar being collapsed, and it is where the reader is already looking for the page's
+            own content rather than three levels into a nav rail.
+          */}
+          {signOutFailed && (
+            <div className="notice" role="alert">
+              <p>We could not sign you out — you are still signed in.</p>
+              <div className="button-row">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => void handleSignOut()}
+                  disabled={signingOut}
+                >
+                  {signingOut ? 'Signing out…' : 'Try again'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {children}
+        </div>
       </main>
     </div>
   );
@@ -98,46 +188,39 @@ export function StaffLayout({
  * is one they have just given up the right to see, and stepping back into it would only produce a
  * `401` and a second redirect.
  *
- * The failure state is inline rather than a notice at the top of the page, because the control that
- * failed is the one the reader is looking at. Signing out is also the one action where a silent
- * failure is a security problem rather than an inconvenience: a staff member who believes they have
- * signed out and has not is worse off than one who is told plainly to try again. So the message says
- * the session is still open, which is the fact that matters.
+ * ## Presentational, and why
+ *
+ * This renders the button and nothing else — it owns no request and no failure state. Both live in
+ * `StaffLayout`, because the failure has to be shown outside the sidebar: a message inside a
+ * container that animates to `width: 0` with `overflow: hidden` can be hidden by the very thing it
+ * is warning about, and a staff member who collapsed the sidebar after a failed sign-out would be
+ * left with an open session and nothing on screen saying so.
+ *
+ * Signing out is also the one action here where a silent failure is a security problem rather than
+ * an inconvenience, which is why the notice keeps an explicit "Try again" rather than only stating
+ * the problem.
  */
-function SignOut() {
-  const [signingOut, setSigningOut] = useState(false);
-  const [failed, setFailed] = useState(false);
-
-  async function handleSignOut() {
-    setSigningOut(true);
-    setFailed(false);
-
-    try {
-      await staffLogout();
-      navigate('/staff/login', { replace: true });
-    } catch {
-      setFailed(true);
-      setSigningOut(false);
-    }
-  }
-
+function SignOutButton({
+  collapsed,
+  signingOut,
+  onSignOut,
+}: {
+  collapsed: boolean;
+  signingOut: boolean;
+  onSignOut: () => Promise<void>;
+}) {
   return (
     <div className="staff-account">
       <button
         type="button"
         className="staff-signout"
-        onClick={() => void handleSignOut()}
+        onClick={() => void onSignOut()}
         disabled={signingOut}
+        tabIndex={collapsed ? -1 : undefined}
       >
         <LogOut aria-hidden="true" />
         {signingOut ? 'Signing out…' : 'Sign out'}
       </button>
-
-      {failed && (
-        <p className="staff-signout-error" role="alert">
-          We could not sign you out — you are still signed in. Try again.
-        </p>
-      )}
     </div>
   );
 }

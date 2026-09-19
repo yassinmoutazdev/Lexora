@@ -201,6 +201,46 @@ export type StatementAggregate = {
 };
 
 /**
+ * One *problem area* — a group of statements the instrument (FR-PROB-001) targets at the same
+ * underlying difficulty — with every statement's responses pooled into one figure (FR-STAFF-008).
+ *
+ * ## Why this exists alongside `StatementAggregate`, not instead of it
+ *
+ * The 20 statements are written in groups of 2–3 that all probe the same difficulty from a
+ * different angle (`sp-01`/`sp-02`/`sp-03` are all "speaking and confidence", worded three ways).
+ * Ranking the 20 statements against each other, as the dashboard used to, compares fragments of a
+ * problem to whole problems and to each other — a low-sample single statement can outrank an area
+ * that is a real, well-supported signal, just because it happened to get a slightly higher mean on
+ * fewer responses. Pooling every statement in an area into one number is what turns "20 things a
+ * staff member has to read and mentally group themselves" into "7 problems, ranked by how common
+ * each one actually is". The individual statements are not discarded — they are what a reader opens
+ * one of these areas to see — so `StatementAggregate` stays exactly as it was, one level down.
+ *
+ * ## How the numbers are pooled
+ *
+ * `counts` sums each scale point's count across every statement in the area, and `mean` is computed
+ * from that pooled distribution directly (not averaged from the statements' own means), so an area
+ * with one heavily-answered statement and one lightly-answered one is not given the same weight as
+ * an area where both were answered equally — each individual response counts once, the same way it
+ * would if the area had been asked as a single statement.
+ *
+ * ## What this deliberately does not carry
+ *
+ * An earlier version of this type also exposed `responses`, `statementCount`, and `mostCommon`, all
+ * computed here and none of them rendered by the panel: the row shows a rank, an area name, a bar,
+ * and a mean, and opening it shows the statements. Three fields computed, serialized on every
+ * dashboard request, and read by nobody is the same dead weight as a CSS rule with no markup — it
+ * invites a future reader to treat them as load-bearing. The counts they were derived from are still
+ * here, so the total is one `reduce` away for whoever needs it.
+ */
+export type ProblemAreaAggregate = {
+  area: string;
+  areaLabel: string;
+  mean: number;
+  counts: { value: number; label: string; count: number }[];
+};
+
+/**
  * An AI-derived category and how often it came up.
  *
  * The type name carries "derived" for the reason FR-PROB-011 gives: *"AI-generated interpretations
@@ -255,9 +295,15 @@ export type DashboardPayload = {
   /** Grammar, Vocabulary, Reading, and Writing, in that order (FR-STAFF-006). */
   sections: SectionAggregate[];
   problems: {
-    /** The students' own five-point responses, per statement. */
+    /**
+     * The 7 problem areas, pooled from every statement that targets each one and ranked worst
+     * first (`ProblemAreaAggregate`) — the primary view: "which problems are most common".
+     */
+    areas: ProblemAreaAggregate[];
+    /** The students' own five-point responses, per individual statement — the detail one level
+     *  down from an area, for whoever opens one to see what it's built from. */
     statements: StatementAggregate[];
-    /** The AI's categories, kept separate from the line above (FR-PROB-011). */
+    /** The AI's categories, kept separate from the lines above (FR-PROB-011). */
     derivedCategories: DerivedCategoryAggregate[];
     /** How many open-text responses have a finished analysis — the denominator for the above. */
     analysedResponses: number;
@@ -460,6 +506,8 @@ export class DashboardService {
       this.deps.dashboard.recentSubmissions(filter, RECENT_SUBMISSIONS_LIMIT),
     ]);
 
+    const statements = this.buildStatements(likertRows);
+
     return {
       outcome: 'ok',
       payload: {
@@ -469,7 +517,8 @@ export class DashboardService {
         overall: this.buildOverall(scoreRows),
         sections: COMPARED_SECTIONS.map((section) => this.buildSection(section, scoreRows)),
         problems: {
-          statements: this.buildStatements(likertRows),
+          areas: buildProblemAreas(statements),
+          statements,
           derivedCategories: derivedRows.map((row) => ({ label: row.label, count: row.count })),
           analysedResponses: countAnalysedResponses(processingRows),
         },
@@ -984,6 +1033,71 @@ function bandCounts(counts: Map<string, number>): ScoreBand[] {
 /** A statement's position in its bundle, so the instrument's own ordering is preserved. */
 function statementOrder(content: ReturnType<ContentLoader['getContent']>, statementId: string): number {
   return content.studentProblems.statements.findIndex((statement) => statement.id === statementId);
+}
+
+/**
+ * Pools every statement's responses into its problem area (see `ProblemAreaAggregate`), and ranks
+ * the result worst first — the whole point of the grouping is "which problem is most common",
+ * so the list is the ranking, not a re-sortable table the reader has to rank themselves.
+ *
+ * Pooling is done from the already-built `StatementAggregate[]` rather than the raw Likert rows a
+ * second time: `buildStatements` has already resolved each row to the statement it belongs to and
+ * skipped anything that could not be resolved (a row/bundle disagreement), so summing its output is
+ * summing exactly the responses that made it into the statement-level view, with no second copy of
+ * that resolution logic to keep in step with the first.
+ *
+ * Grouped by area id alone, not `(contentVersion, area)` — unlike statements, an area has no wording
+ * of its own to disagree about across versions (`content/*.json`'s `statusNote` records the 7 areas
+ * as structurally unchanged since v1), so a student answering under v1 and one answering under v2
+ * are still the same "speaking and confidence" signal and belong in the same pool.
+ */
+function buildProblemAreas(statements: StatementAggregate[]): ProblemAreaAggregate[] {
+  const byArea = new Map<
+    string,
+    { areaLabel: string; counts: Map<number, { label: string; count: number }> }
+  >();
+
+  for (const statement of statements) {
+    const held = byArea.get(statement.area) ?? {
+      areaLabel: statement.areaLabel,
+      counts: new Map<number, { label: string; count: number }>(),
+    };
+
+    for (const point of statement.counts) {
+      const existing = held.counts.get(point.value);
+      held.counts.set(point.value, {
+        label: point.label,
+        count: (existing?.count ?? 0) + point.count,
+      });
+    }
+
+    byArea.set(statement.area, held);
+  }
+
+  const aggregates: ProblemAreaAggregate[] = [];
+
+  for (const [area, held] of byArea) {
+    const counts = [...held.counts.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([value, point]) => ({ value, label: point.label, count: point.count }));
+
+    // `responses` is still the denominator the mean needs, even though it is not part of the
+    // aggregate — every response counts once, so an area is weighted by how much was actually
+    // answered rather than by how many statements happen to exist in it.
+    const responses = counts.reduce((total, count) => total + count.count, 0);
+    const total = counts.reduce((sum, count) => sum + count.value * count.count, 0);
+
+    aggregates.push({
+      area,
+      areaLabel: held.areaLabel,
+      mean: responses === 0 ? 0 : round(total / responses),
+      counts,
+    });
+  }
+
+  // Worst (highest mean — agreement means difficulty) first; ties broken by area id for a result
+  // that does not reorder itself between two otherwise-identical requests.
+  return aggregates.sort((a, b) => b.mean - a.mean || a.area.localeCompare(b.area));
 }
 
 /** Submission counts, split by lifecycle status and by background-processing status. */

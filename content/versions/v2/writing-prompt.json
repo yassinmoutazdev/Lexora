@@ -2,12 +2,12 @@
   "section": "writing",
   "title": "Writing",
   "contentStatus": "provisional",
-  "statusNote": "Production draft for the pilot cohort (v2). The task, genre, and guidance are a considered proposal, judged answerable by students from basic level upward: a basic student can state a preference with a single example, and a strong one can weigh depth against breadth and qualify a position. Requires curriculum team sign-off before contentStatus is changed to \"approved\".",
+  "statusNote": "Production draft for the pilot cohort (v2). Replaces an earlier task (an abstract opinion essay on university curriculum breadth), which was judged too demanding for a B1 writer: arguing a position on an abstract policy question is realistically a B2/C1 task. This version keeps the same task shape — state a preference, give reasons, support with a personal example — the writing rubric's taskCompletion criterion already expects, but moves it to a concrete, everyday topic every student has a real personal answer to, and shortens the expected length so a B1 writer is not penalised for running short of a target built for a longer essay. Requires curriculum team sign-off before contentStatus is changed to \"approved\".",
   "instructions": "Write your answer in English. There is no time limit, and you may plan your ideas before you begin.",
   "task": {
     "id": "writing-task-1",
-    "genre": "opinion essay",
-    "prompt": "Some people believe university courses should focus only on subjects directly related to a student's future job. Others believe students should also study a wider range of subjects. Write an essay giving your opinion on this question. Support your view with reasons and examples from your own experience.",
-    "guidance": "Write in clear paragraphs. State your position, give reasons for it, and support each reason with an example. Aim for a well-organised answer of roughly 200 to 250 words; there is no penalty for writing more or less than this."
+    "genre": "opinion (short)",
+    "prompt": "Some people prefer to live in a big city. Others prefer to live in a small town or village. Which do you prefer? Give your opinion and explain why, using an example from your own life.",
+    "guidance": "Write in clear paragraphs. State which you prefer, give two reasons for your choice, and support at least one reason with an example from your own life. Aim for roughly 120 to 150 words; there is no penalty for writing more or less than this."
   }
 }

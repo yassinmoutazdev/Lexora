@@ -224,6 +224,19 @@ a {
 }
 
 /*
+  `.ai-panel` (the Student Problems panel) sits in the same top-level stack as `.card` but is a
+  different class, so it fell outside the `.card + .card` rule above on both sides: nothing added
+  space above it when a `.card` came first, and nothing added space below it when a `.card` followed.
+  Named explicitly both ways rather than folding `.ai-panel` into the `.card` selector itself, since
+  `.ai-panel` deliberately keeps its own accent border and background (see its own rule) and isn't a
+  plain card.
+*/
+.card + .ai-panel,
+.ai-panel + .card {
+  margin-top: var(--gap);
+}
+
+/*
   Removed: `.card--emphasis`.
 
   It was defined as "the one sanctioned 'look here first' surface per screen" and then never
@@ -294,6 +307,32 @@ h3 {
   height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  transition:
+    width var(--motion-slow) var(--ease-standard),
+    padding var(--motion-slow) var(--ease-standard);
+}
+
+/*
+  Collapsed: width and padding go to zero rather than the sidebar being `display: none`. `.staff-
+  main` needs no rule of its own to fill the freed space — it is already `flex: 1` in `.staff-shell`,
+  so it expands as `.staff-sidebar` shrinks, and the width transition above animates smoothly instead
+  of the layout jumping the way a `display` change would.
+
+  Content stays laid out at its normal width during the transition (not `width: 0` on children) so it
+  doesn't reflow line-by-line as the sidebar closes; `overflow: hidden` on the sidebar itself is what
+  clips it. The nav's own `aria-hidden` and each control's `tabIndex={-1}` (see `StaffLayout`) are
+  what actually take it out of tab order and the accessibility tree — this only handles how it looks.
+*/
+.staff-shell--collapsed .staff-sidebar {
+  width: 0;
+  padding-inline: 0;
+  border-inline-end: none;
+}
+
+.staff-sidebar > * {
+  width: calc(var(--sidebar-w) - 2rem);
+  flex-shrink: 0;
 }
 
 .staff-sidebar .brand {
@@ -393,12 +432,6 @@ h3 {
   cursor: progress;
 }
 
-.staff-signout-error {
-  margin: 0.5rem 0.7rem 0;
-  color: var(--danger);
-  font-size: 0.82rem;
-  font-weight: 600;
-}
 
 .staff-main {
   flex: 1;
@@ -408,7 +441,7 @@ h3 {
 .staff-topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.9rem;
   padding: 1rem 2rem;
   border-bottom: 1px solid var(--line);
   background: var(--paper);
@@ -417,9 +450,42 @@ h3 {
   z-index: 5;
 }
 
+/* Takes the space `justify-content: space-between` used to, now that a third child (the sidebar
+   toggle) sits before it: everything after this pushes to the far end on its own. */
 .staff-topbar h1 {
+  flex: 1;
   font-size: 1.3rem;
   margin: 0;
+}
+
+/*
+  The sidebar's reopen control (see `StaffLayout`). Lives in the topbar rather than in the sidebar
+  itself, because collapsing the sidebar is exactly the moment a control placed inside it would
+  become unreachable.
+*/
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+button.sidebar-toggle:hover {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.sidebar-toggle svg {
+  width: 1.15rem;
+  height: 1.15rem;
 }
 
 .staff-content {
@@ -522,6 +588,42 @@ h3 {
 .field--invalid input,
 .field--invalid textarea {
   border-color: var(--danger);
+}
+
+.field-with-toggle {
+  position: relative;
+}
+
+.field-with-toggle input {
+  padding-right: 2.5rem;
+}
+
+.field-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.55rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.field-toggle:hover {
+  color: var(--ink);
+  background: var(--line-soft);
+}
+
+.field-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .field-error {
@@ -1891,34 +1993,140 @@ details.dist-toggle[open] summary::before {
   margin: 0 0 0.3rem;
 }
 
-.ai-rank-list {
+/* The flat, worst-first ranking (see `ProblemsPanel`/`ProblemArea`). Deliberately plainer than the
+   panel's own accent styling above: this list's job is "one number per row, read fast", and giving
+   every row the same AI-purple weight the panel heading carries would compete with that rather than
+   support it, so rows use the page's ordinary card/line tokens instead. */
+.problem-rank-list {
+  list-style: none;
+  margin: 0.9rem 0 0;
+  padding: 0;
+}
+
+.problem-rank-row + .problem-rank-row {
+  margin-top: 0.5rem;
+}
+
+.problem-rank-row details {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.problem-rank-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.8rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.problem-rank-summary::-webkit-details-marker {
+  display: none;
+}
+
+.problem-rank-position {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--line-soft);
+  color: var(--ink-faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Only the single top-ranked row is coloured — a whole list of warm-coloured rows would say nothing
+   the ranking itself does not already say, and would read as "every one of these is alarming" when
+   the point of ranking is that they are not all equally so. */
+.problem-rank-row--worst .problem-rank-position {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.problem-rank-label {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.problem-rank-bar-track {
+  width: 5.5rem;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line-soft);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.problem-rank-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--ai);
+}
+
+.problem-rank-row--worst .problem-rank-bar-fill {
+  background: var(--danger);
+}
+
+.problem-rank-mean {
+  width: 2.4rem;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.problem-rank-row--worst .problem-rank-mean {
+  color: var(--danger);
+}
+
+.problem-rank-detail {
+  padding: 0 0.8rem 0.75rem;
+  border-top: 1px solid var(--line-soft);
+  margin-top: -1px;
+}
+
+.statement-list {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.ai-rank-row {
-  display: grid;
-  grid-template-columns: 1fr 3.2rem;
-  align-items: center;
-  gap: 0.9rem;
-  padding: 0.55rem 0;
+.statement {
   border-top: 1px solid var(--line-soft);
+  padding-top: 0.6rem;
+  margin-top: 0.6rem;
 }
 
-.ai-rank-row:first-child {
+.statement:first-child {
   border-top: none;
+  padding-top: 0.6rem;
+  margin-top: 0;
 }
 
-.ai-statement {
+.statement-text {
+  margin: 0 0 0.2rem;
   font-size: 0.88rem;
 }
 
-.ai-mean {
-  text-align: right;
-  font-weight: 700;
-  color: var(--ai);
-  font-variant-numeric: tabular-nums;
+.statement-meta {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-faint);
+}
+
+.scale-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  margin: 0.85rem 0.1rem 0;
 }
 
 details.ai-detail summary {
@@ -2043,6 +2251,23 @@ details.ai-detail[open] summary::before {
     flex-wrap: wrap;
     align-items: center;
     gap: 0.4rem;
+    transition:
+      height var(--motion-slow) var(--ease-standard),
+      padding var(--motion-slow) var(--ease-standard);
+  }
+
+  /* At this width the sidebar is already a compact bar, not the fixed-width rail the desktop
+     collapse rule above sizes its children for — reset that so the row can wrap and size normally,
+     and collapse it by height instead of width, matching the row-not-column layout above. */
+  .staff-sidebar > * {
+    width: auto;
+    flex-shrink: 1;
+  }
+
+  .staff-shell--collapsed .staff-sidebar {
+    height: 0;
+    padding-block: 0;
+    border-bottom: none;
   }
 
   /* The wordmark keeps the left edge and pushes everything else to the right. */

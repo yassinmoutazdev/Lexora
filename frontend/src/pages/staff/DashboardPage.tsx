@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type {
   DashboardPayload,
   DifficultyComparison,
+  ProblemAreaAggregate,
   SectionAggregate,
   StatementAggregate,
   TopicAggregate,
@@ -503,6 +504,7 @@ export function DashboardBody({
       {/* <DifficultyPanel difficulty={dashboard.difficulty} /> */}
 
       <ProblemsPanel
+        areas={dashboard.problems.areas}
         statements={dashboard.problems.statements}
         derivedCategories={dashboard.problems.derivedCategories}
         analysedResponses={dashboard.problems.analysedResponses}
@@ -841,16 +843,31 @@ function formatDifficulty(difficulty: string): string {
 }
 
 /**
- * The most common Student Problems responses (FR-STAFF-008).
+ * The most common student-reported problems, ranked by area (FR-STAFF-008).
  *
- * ## Leads with a ranking, not a full read
+ * ## Ranked by problem area, not by individual statement
  *
- * Every one of the 15–20 statements used to render fully expanded — its own five-band histogram,
- * always on screen, regardless of whether it was one of the ones actually worth attention. This
- * panel now leads with the `TOP_STATEMENTS_SHOWN` statements the cohort agreed with *most*
- * (`mean` is already a five-point scale where "agree" indicates difficulty; see
- * `StatementAggregate`), because "what's the actual signal" is the question a staff member opens
- * this panel to answer. Every statement's full histogram is still one click away, not removed.
+ * The instrument (FR-PROB-001) asks 2–3 differently-worded statements per problem area on purpose —
+ * "I hesitate to speak because I fear mistakes" and "I find it hard to speak without preparing
+ * first" are two angles on one problem, not two problems. Ranking the raw statements against each
+ * other, as this panel used to, compared fragments of a problem to whole problems: a single
+ * lightly-answered statement could outrank an area with real, broad support just by having a
+ * slightly higher mean on far fewer responses. `ProblemAreaAggregate` pools every statement sharing
+ * an area into one number before ranking, so this list answers "which problem is most common",
+ * which is the question a staff member opens this panel to ask — not "which single question got the
+ * highest score".
+ *
+ * ## One flat list, one number, nothing else — until you ask
+ *
+ * An earlier version of this panel showed a full five-point histogram for every area, always
+ * expanded. That put more numbers on screen than the question needed: "which problem is most
+ * common" only needs a rank and a mean, not a five-bar distribution up front. So the collapsed row
+ * is now just a position, the area's name, and its mean (1–5, higher means more agreement means
+ * more difficulty) — worst first, all 7 areas, no separate "top N" cut before "view all" the way an
+ * even earlier version had, since 7 is small enough to show in full. Opening a row goes straight to
+ * the individual statements it was built from, each with its own mean and response count — no
+ * histogram there either (see `ProblemStatement`); a staff member who opens a row wants to read the
+ * actual statements, not a second chart.
  *
  * ## Why the statements and the AI's categories are separate blocks
  *
@@ -864,50 +881,53 @@ function formatDifficulty(difficulty: string): string {
  * aggregates. Staff who need it open the submission.
  */
 function ProblemsPanel({
+  areas,
   statements,
   derivedCategories,
   analysedResponses,
 }: {
+  areas: ProblemAreaAggregate[];
   statements: StatementAggregate[];
   derivedCategories: { label: string; count: number }[];
   analysedResponses: number;
 }) {
-  const ranked = [...statements].sort((a, b) => b.mean - a.mean);
-  const leading = ranked.slice(0, TOP_STATEMENTS_SHOWN);
+  // The scale's own ceiling, for sizing each row's bar — `content/*.json`'s five-point scale, but
+  // read from the data itself (the highest value any area's own counts carry) rather than a bare
+  // literal `5`, so a future change to the scale's length is not a second place this number lives.
+  const scaleMax = Math.max(
+    1,
+    ...areas.flatMap((area) => area.counts.map((count) => count.value)),
+  );
 
   return (
     <div className="ai-panel">
       <h2>Student Problems — curriculum signal only</h2>
       <p className="hint">
         This section never affects any English score (FR-PROB-008/012). It is collected for
-        curriculum analysis, and it is not a clinical or diagnostic instrument (FR-PROB-006). The
-        statements below are the ones the cohort agreed with most.
+        curriculum analysis, and it is not a clinical or diagnostic instrument (FR-PROB-006). Skills
+        are ranked from most to least commonly reported as difficult.
       </p>
 
-      {statements.length === 0 ? (
+      {areas.length === 0 ? (
         <p className="muted">No statements have been answered yet.</p>
       ) : (
         <>
-          <ul className="ai-rank-list">
-            {leading.map((statement) => (
-              <li className="ai-rank-row" key={`${statement.contentVersion}:${statement.statementId}`}>
-                <span className="ai-statement">{statement.statement}</span>
-                <span className="ai-mean">{statement.mean}</span>
-              </li>
+          <ul className="problem-rank-list">
+            {areas.map((area, index) => (
+              <ProblemArea
+                key={area.area}
+                area={area}
+                position={index + 1}
+                worst={index === 0}
+                scaleMax={scaleMax}
+                statements={statements.filter((statement) => statement.area === area.area)}
+              />
             ))}
           </ul>
-
-          <details className="ai-detail">
-            <summary>View all {statements.length} statements</summary>
-            <ul className="problem-list">
-              {ranked.map((statement) => (
-                <ProblemStatement
-                  key={`${statement.contentVersion}:${statement.statementId}`}
-                  statement={statement}
-                />
-              ))}
-            </ul>
-          </details>
+          <p className="scale-legend">
+            <span>1 — Strongly disagree</span>
+            <span>{scaleMax} — Strongly agree</span>
+          </p>
         </>
       )}
 
@@ -940,45 +960,71 @@ function ProblemsPanel({
   );
 }
 
-/** How many statements the leading ranked list shows before "View all" takes over. */
-const TOP_STATEMENTS_SHOWN = 3;
+/**
+ * One ranked row: collapsed, it shows only a position, the area's name, a bar, and its mean.
+ * Opened, it shows the individual statements pooled into that mean — nothing else. `worst` marks
+ * the single top-ranked row so it carries a little visual weight, the same way the mockup used a
+ * warmer colour on rank 1 rather than making every row compete equally for attention.
+ */
+function ProblemArea({
+  area,
+  position,
+  worst,
+  scaleMax,
+  statements,
+}: {
+  area: ProblemAreaAggregate;
+  position: number;
+  worst: boolean;
+  scaleMax: number;
+  statements: StatementAggregate[];
+}) {
+  const barPercent = scaleMax > 0 ? Math.round((area.mean / scaleMax) * 100) : 0;
+
+  return (
+    <li className={`problem-rank-row${worst ? ' problem-rank-row--worst' : ''}`}>
+      <details>
+        <summary className="problem-rank-summary">
+          <span className="problem-rank-position">{position}</span>
+          <span className="problem-rank-label">{area.areaLabel}</span>
+          <span className="problem-rank-bar-track">
+            <span className="problem-rank-bar-fill" style={{ width: `${barPercent}%` }} />
+          </span>
+          <span className="problem-rank-mean">{area.mean}</span>
+        </summary>
+
+        <div className="problem-rank-detail">
+          {statements.length === 0 ? (
+            <p className="muted">No statements answered yet for this area.</p>
+          ) : (
+            <ul className="statement-list">
+              {statements.map((statement) => (
+                <ProblemStatement
+                  key={`${statement.contentVersion}:${statement.statementId}`}
+                  statement={statement}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+      </details>
+    </li>
+  );
+}
 
 /**
- * One statement's row: its wording, how the cohort answered it, and the modal response.
- *
- * The full five-point spread is shown rather than only the mode, because "most students agreed" and
- * "the cohort split evenly with a slight lean" are different findings about a curriculum, and the
- * mode alone cannot tell them apart.
+ * One statement, opened from its area: its wording, its own mean, and how many students answered
+ * it. No histogram here — the pooled mean one level up is the summary figure; a reader who has
+ * opened this far wants the actual statements, not a second chart to read per statement.
  */
 function ProblemStatement({ statement }: { statement: StatementAggregate }) {
   return (
-    <li className="problem">
-      <p className="problem-statement">{statement.statement}</p>
-      <p className="muted">
-        {statement.areaLabel} · {statement.responses} responses · mean {statement.mean}
+    <li className="statement">
+      <p className="statement-text">{statement.statement}</p>
+      <p className="statement-meta">
+        mean {statement.mean} · {statement.responses}{' '}
+        {statement.responses === 1 ? 'response' : 'responses'}
       </p>
-      {statement.counts.map((count) => (
-        <div key={count.value} className="bar-row">
-          <span className="bar-label">{count.label}</span>
-          <span className="bar-track">
-            <span
-              className="bar-fill"
-              style={{
-                width:
-                  statement.responses === 0
-                    ? '0%'
-                    : `${(count.count / statement.responses) * 100}%`,
-              }}
-            />
-          </span>
-          <span className="bar-value">{count.count}</span>
-        </div>
-      ))}
-      {statement.mostCommon !== null && (
-        <p className="muted">
-          Most common: {statement.mostCommon.label} ({statement.mostCommon.count})
-        </p>
-      )}
     </li>
   );
 }
