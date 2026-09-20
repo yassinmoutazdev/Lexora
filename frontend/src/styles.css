@@ -40,6 +40,29 @@
   --ai: #6a4f9c;
   --ai-soft: #f1edf8;
 
+  /*
+    The Student Problems scale ramp, 1 (strongly disagree) to 5 (strongly agree).
+
+    Scoped to one component and defined here rather than in the shared palette, because it is a
+    deliberate exception and should not be reachable by anything else. `DESIGN.md` amends the Reserved
+    Hue Rule to record it: this is the one place `--ai` is not the whole story, and the reasoning is
+    in that rule's own entry.
+
+    No new hues are introduced. The two poles are the existing `--ai` (purple, deepened for weight at
+    the strongly-disagree end) and `--success` (green), and the three middle steps are midpoints
+    between them through a neutral grey — so the ramp reads as the established palette stretched,
+    rather than as four new colours.
+
+    Every step is >= 3:1 against `--paper` (`#ffffff` here), the threshold for a UI component
+    boundary: 8.23, 3.98, 3.64, 3.29, 5.24. The neutral was `#9aa3ae`, which measured 2.55:1 and
+    failed; it is `#7d8794` for that reason and not for taste.
+  */
+  --sp-scale-1: #5b3f8f;
+  --sp-scale-2: #8a74b8;
+  --sp-scale-3: #7d8794;
+  --sp-scale-4: #4f9d6f;
+  --sp-scale-5: #2b7a53;
+
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-pill: 999px;
@@ -108,6 +131,15 @@
 
     --ai: #b39ce0;
     --ai-soft: #241f30;
+
+    /* The Student Problems scale ramp — see the light block for what this is and why it exists.
+       Against `--paper` (#1b1f26) the steps measure 6.89, 5.22, 4.27, 7.44, 7.64 — all clear of the
+       3:1 UI-boundary threshold, so no step needed adjusting on this side. */
+    --sp-scale-1: #b39ce0;
+    --sp-scale-2: #9a86c9;
+    --sp-scale-3: #7a8290;
+    --sp-scale-4: #75bd93;
+    --sp-scale-5: #5bc48a;
   }
 }
 
@@ -136,6 +168,15 @@
 
   --ai: #b39ce0;
   --ai-soft: #241f30;
+
+  /* The Student Problems scale ramp — see the light block. Same five values as the
+     `prefers-color-scheme` path above; the two dark blocks are kept in step by hand because the
+     explicit toggle has to be able to override the OS preference. */
+  --sp-scale-1: #b39ce0;
+  --sp-scale-2: #9a86c9;
+  --sp-scale-3: #7a8290;
+  --sp-scale-4: #75bd93;
+  --sp-scale-5: #5bc48a;
 }
 
 /* ---------------------------------------------------------------- base */
@@ -210,6 +251,29 @@ a {
 */
 .page--toggle {
   padding-top: 3.4rem;
+}
+
+/*
+  A heading that a section change scrolls to must stop below the floating toggle, not under it.
+
+  `AssessmentPage` moves the reader to the new section's heading with
+  `scrollIntoView({ block: 'start' })`, which puts the target flush with the top of the viewport —
+  which is exactly where `.theme-toggle--floating` sits. Measured after a section change at 360px:
+  the heading sat at top 0 with its box running 45→315, and the toggle occupied 14→49 vertically and
+  232→344 horizontally, so the two overlapped on every section. On the short headings ("Reading")
+  only the boxes collided and the glyphs happened to miss each other; a longer one runs its text
+  under the control.
+
+  The value is `.page--toggle`'s own top padding, because that is the room already reserved for the
+  toggle at the top of a page. Scrolling to a section should land the reader in the same place the
+  page itself starts them.
+
+  `scroll-margin-top` rather than an offset argument, because `scrollIntoView` has no offset option
+  and the alternative — computing a `window.scrollTo` from the toggle's measured height — would put
+  a hardcoded layout number in the component instead of in the stylesheet that causes it.
+*/
+.page--toggle :is(h1, h2)[tabindex='-1'] {
+  scroll-margin-top: 3.4rem;
 }
 
 .card {
@@ -1247,7 +1311,19 @@ details.detail-panel .question-list {
   white-space: pre-wrap;
 }
 
-[dir='rtl'] .original-text {
+/*
+  `:dir(rtl)`, not `[dir='rtl']`.
+
+  The selector was `[dir='rtl'] .original-text` and it never matched anything. On the staff screens
+  the blockquote sits in an LTR document with no `dir` attribute anywhere above it, so an Arabic
+  response drew its quote bar on the left of right-to-left text — the exact case this rule was
+  written for. The student's own textarea uses `dir="auto"` so the browser can resolve the direction
+  from the text, and the blockquote now does the same; `dir="auto"` leaves the *attribute* reading
+  "auto" while the *used* direction becomes `rtl`, so `[dir='rtl']` still would not match it.
+  `:dir()` is the pseudo-class that matches the resolved direction rather than the attribute, which
+  is what the rule actually meant.
+*/
+.original-text:dir(rtl) {
   padding: 0 0.9rem 0 0;
   border-left: none;
   border-right: 3px solid var(--line);
@@ -1571,6 +1647,27 @@ details.detail-panel .question-list {
   border-radius: 0;
   padding: 1rem 0;
   margin: 0;
+
+  /* One row is five hit boxes and the gaps between them; the two rows below inherit these. */
+  --sp-hit: 2.75rem;
+  --sp-scale-width: 22rem;
+
+  /*
+    `min-width: 0` neutralises a user-agent default that has already caused one real bug here.
+
+    `<fieldset>` carries `min-inline-size: min-content`, unlike every other block, so it refuses to
+    shrink below the intrinsic width of its contents. When this row was five `nowrap` text labels
+    that intrinsic width was ~570px in English and ~500px in Arabic: the fieldset sized itself to it,
+    pushed the card off the screen (the whole document measured 619px at a 360px viewport), and the
+    statement text ran past the edge.
+
+    The circle row that replaced it has a min-content of about 236px — five 44px boxes and the gaps —
+    which fits the 272px a card offers at 360px, so this is no longer the difference between working
+    and broken *today*. It is kept because the trap is the fieldset's, not the labels': any future
+    widening of the row, or a narrower container, silently reintroduces exactly the same overflow,
+    and this one declaration is what prevents it.
+  */
+  min-width: 0;
 }
 
 .scale-row:first-of-type {
@@ -1585,73 +1682,178 @@ details.detail-panel .question-list {
 }
 
 /*
- * The five-point scale as one row. `flex-wrap: nowrap` plus `flex: 1 1 0` on each option is what
- * keeps "Strongly agree" from wrapping onto its own line: every option takes an equal share of the
- * row's width instead of its natural text width, and the row scrolls horizontally on the narrowest
- * phones rather than wrapping (wrapping is what put "Strongly agree" alone before).
- */
+  The five-point scale as bare circles, with only the two poles named beneath it.
+
+  ## What replaced what, and why
+
+  This was five full-text pills — "Strongly disagree" through "Strongly agree" — held on one line by
+  `flex: 1 1 0` and allowed to scroll horizontally below 26rem. It did not work on a phone, which is
+  the device this section is built for: at 360px the labels truncated, the row scrolled sideways
+  under the reader's thumb, and the `title` attribute that was supposed to reveal a truncated label
+  does nothing on touch at all. `UX-DECISIONS.md` had recorded that as P2-11 and deferred it.
+
+  The replacement spends no horizontal width on words. Two channels carry the meaning instead, and
+  they are deliberately orthogonal so neither has to be inferred from the other:
+
+  - **Size is intensity** — largest at both poles, smallest at the neutral middle, so the shape of
+    the row reads "strong … weak … strong" without a single label. See the size steps below.
+  - **Colour is direction** — the `--sp-scale-*` ramp runs purple (disagree) through neutral grey to
+    green (agree).
+
+  Selection is a **fill**, not a colour change: an unselected point is a ring and a selected one is
+  solid, so the state survives greyscale and colour-blindness. Colour alone is never the signal.
+
+  Nothing here is direction-specific. The row is DOM-ordered 1→5 and mirrors under `dir="rtl"`, so
+  the Arabic state lands with "غير موافق" on the right and the purple end rightmost — the same
+  arrangement the reference has, reached by ordinary flow rather than a second set of rules.
+*/
 .scale-options {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 0.35rem;
-  overflow-x: auto;
-  padding-bottom: 0.1rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  /* Without a ceiling the five points spread across a 62rem card and stop reading as a scale.
+     The *bounded* width is what makes `space-between` mean "these five, adjacent", which is the
+     whole reason the row does not need a label under every point. */
+  max-width: var(--sp-scale-width);
 }
 
 .scale-option {
+  position: relative;
   display: flex;
-  flex: 1 1 0;
-  min-width: 0;
+  flex: none;
+  color: var(--sp-dot-colour);
+}
+
+/*
+  The circle itself, drawn on the label rather than on a real element: it is decoration, and the
+  label is the one thing here that is genuinely interactive and focusable.
+
+  `currentColor` for both the ring and the fill is what keeps the colour ramp to one declaration per
+  point (below) instead of a border colour, a background and a hover state each.
+*/
+.scale-option label {
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.3rem;
-  padding: 0.45rem 0.4rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  font-size: 0.82rem;
-  background: var(--paper);
-  text-align: center;
-  white-space: nowrap;
-}
-
-.scale-option span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.scale-option:hover {
-  background: var(--ai-soft);
-  border-color: var(--ai);
-}
-
-.scale-option:has(input:checked) {
-  border-color: var(--ai);
-  background: var(--ai-soft);
-  font-weight: 600;
-  color: var(--ai);
-}
-
-.scale-option label {
+  width: var(--sp-hit);
+  height: var(--sp-hit);
   cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
+.scale-option label::before {
+  content: '';
+  width: var(--sp-dot);
+  height: var(--sp-dot);
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
+}
+
+.scale-option:has(input:checked) label::before {
+  background: currentColor;
+}
+
+.scale-option:hover label::before {
+  transform: scale(1.12);
+}
+
+/*
+  The input is hidden but *not* removed. `display: none` or `visibility: hidden` would take it out of
+  the tab order and out of the arrow-key group navigation, and a keyboard user answers this section
+  by arrowing between the five points inside one radio group. It stays 1px, transparent and
+  focusable, and the label above is what the eye and the thumb are aimed at.
+*/
 .scale-option input {
-  flex: none;
-  accent-color: var(--ai);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
 }
 
-@media (max-width: 26rem) {
-  .scale-options {
-    justify-content: flex-start;
-  }
-
-  .scale-option {
-    flex: 0 0 auto;
-    min-width: 5.5rem;
-  }
+/*
+  Focus has to be drawn on the label, because the thing being focused is a 1px transparent box the
+  reader cannot see. This is the one place in the file where the global `:focus-visible` ring is
+  deliberately redirected rather than relied on.
+*/
+.scale-option input:focus-visible + label {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 50%;
 }
+
+/*
+  Size is intensity: the poles are the largest and the neutral centre the smallest.
+
+  Stated as five rules rather than a formula because there are five of them and they were chosen by
+  eye against the reference; an `nth-child` expression that produced them would be harder to adjust
+  and no shorter.
+*/
+.scale-option[data-point='1'],
+.scale-option[data-point='5'] {
+  --sp-dot: 1.55rem;
+}
+
+.scale-option[data-point='2'],
+.scale-option[data-point='4'] {
+  --sp-dot: 1.2rem;
+}
+
+.scale-option[data-point='3'] {
+  --sp-dot: 0.9rem;
+}
+
+/* Colour is direction. One declaration per point, read by both the ring and the fill above. */
+.scale-option[data-point='1'] {
+  --sp-dot-colour: var(--sp-scale-1);
+}
+
+.scale-option[data-point='2'] {
+  --sp-dot-colour: var(--sp-scale-2);
+}
+
+.scale-option[data-point='3'] {
+  --sp-dot-colour: var(--sp-scale-3);
+}
+
+.scale-option[data-point='4'] {
+  --sp-dot-colour: var(--sp-scale-4);
+}
+
+.scale-option[data-point='5'] {
+  --sp-dot-colour: var(--sp-scale-5);
+}
+
+/*
+  The two poles, named — "Disagree" and "Agree", which are the instrument's own scale points 2 and 4,
+  not its endpoints. The anchors say which way the scale runs; the circles say how far along.
+
+  Inset by half the difference between the hit box and the largest dot, so each label's outer edge
+  lines up with the outer edge of the circle above it rather than with the invisible box around it.
+  `padding-inline` so the pair mirrors with the row in Arabic.
+*/
+.scale-anchors {
+  display: flex;
+  justify-content: space-between;
+  max-width: var(--sp-scale-width);
+  padding-inline: calc((var(--sp-hit) - 1.55rem) / 2);
+  margin-top: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+/*
+  Removed: `.scale-answer`.
+
+  It rendered "Your answer: Neutral" under each scale row, with a reserved `min-height` so its
+  arrival would not shift the statements below it. It was built, seen on a real device, and taken
+  out: echoing the chosen value back reads as the app commenting on the student's answer, and the
+  filled circle already states it plainly. A style describing a line that is deliberately not shown
+  would be a style waiting to be applied by mistake.
+*/
 
 /*
   Below ~375px, `.problem-rank-summary`'s row (position circle + label + 5.5rem bar + mean, each
@@ -2317,6 +2519,51 @@ details.ai-detail[open] summary::before {
 
   .staff-topbar {
     padding: 0.9rem 1rem;
+    /* Two fixed controls and a title in 360px. The title is the only one of the three that can
+       give, and at this gap it had nothing left to give — so the gap gives instead. */
+    gap: 0.6rem;
+  }
+
+  /*
+    The staff topbar's theme toggle drops its label here, and keeps its name.
+
+    At this width the topbar holds the sidebar toggle, the page title, and this control. The title
+    needed 224px ("Assessment dashboard" at 1.3rem) and had 152px, so it wrapped onto a second line
+    and took the sticky bar to 82px tall — a tenth of a phone screen spent on chrome. Nothing in the
+    row could shrink on its own, and the label is the part of it that is redundant: the icon already
+    says which mode pressing will switch to, and `aria-pressed` says which one is on.
+
+    Visually hidden rather than `display: none`, using the same clip-path technique as `.sr-only`
+    above and for the same reason — the accessible name must survive. Written out rather than
+    reusing the `.sr-only` class, because that class is unconditional and this is not: the label is
+    the only thing on screen naming the control on the wider layouts, and it comes straight back
+    above 40rem.
+  */
+  .staff-topbar .theme-toggle-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /*
+    Roomy padding on a pill with a word in it, square padding on one that is only an icon.
+
+    Scoped to the staff topbar, like the label rule above: the floating toggle on the entry, login
+    and assessment pages keeps its visible label. The 2.75rem (44px) minimum is the recommended
+    touch-target size, which an icon with 0.45rem of padding around it (~36px) would fall short of.
+  */
+  .staff-topbar .theme-toggle {
+    padding: 0.45rem;
+    gap: 0;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    justify-content: center;
   }
 
   .staff-content {

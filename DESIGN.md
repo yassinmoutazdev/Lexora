@@ -206,6 +206,11 @@ hues that each mean exactly one thing.
 - **Rule** (`#dde1e7`) / **Soft Rule** (`#e9ecf0`): borders. `--line` outlines a card or control;
   `--line-soft` is the internal divider between list rows and report items.
 - **Derived Violet** (`#6a4f9c`) on **Violet Wash** (`#f1edf8`): reserved. See the rule below.
+- **Scale Ramp** (`--sp-scale-1` … `--sp-scale-5`, `#5b3f8f` / `#8a74b8` / `#7d8794` / `#4f9d6f` /
+  `#2b7a53`): the Student Problems agreement scale, and nothing else. Purple at the disagree pole,
+  neutral grey at the midpoint, green at the agree pole. See the amendment to the Reserved Hue Rule
+  below — this is a deliberate, scoped exception and the only ramp in the system that is not
+  reachable from the shared palette.
 
 Dark mode is a full parallel ramp defined twice — once under `@media (prefers-color-scheme: dark)`
 guarded by `:root:not([data-theme='light'])`, and once under `:root[data-theme='dark']`. The
@@ -217,9 +222,25 @@ explicit toggle always wins over the OS preference. In dark mode Paper becomes `
 
 **The Reserved Hue Rule.** `--ai` / `--ai-soft` mark content that is AI-derived, non-scoring, or
 research-only, and nothing else, ever. It currently appears on the Student Problems banner, the
-Student Problems scale options, the "Derived data" blocks, and the dashboard's Student Problems
-panel. If it ever appears beside a number that counts toward an English score, that is a bug — the
-hue exists so a student can tell "this is not a result" without reading.
+"Derived data" blocks, and the dashboard's Student Problems panel. If it ever appears beside a
+number that counts toward an English score, that is a bug — the hue exists so a student can tell
+"this is not a result" without reading.
+
+> **Amendment (2026-09-20) — the Student Problems scale.** The scale options were listed above as a
+> place `--ai` appears. They no longer use it; they use the **Scale Ramp** instead, and this is the
+> one place the rule is knowingly bent. The scale was rebuilt as five bare circles with only the two
+> poles named, because as five full-text pills it could not fit a phone at 360px — the labels
+> truncated and the row scrolled sideways under the reader's thumb. With the labels gone, colour had
+> to carry direction on its own, and a single hue cannot say "disagree *and* agree" across five
+> points.
+>
+> Two limits keep the bend small. **No new hues were introduced**: the poles are the existing
+> Derived Violet and Success values and the three middle steps are midpoints between them through a
+> neutral grey. And the ramp is a **component-scoped custom property**, not a palette token, so it is
+> not reachable by anything that has no business using it. The rule's intent survives — the section
+> is still non-scoring and still visually unlike anything that counts toward the English score — but
+> a reader comparing the code to the rule should know the exception is deliberate rather than drift.
+> The section's own banner and the "Derived data" blocks still carry `--ai` unchanged.
 
 **The One Accent Rule.** There is one interactive hue. New features do not get their own colour;
 they get the accent, or a reserved semantic hue, or ink. The palette has no room for a fifth
@@ -292,9 +313,10 @@ A single centred column of stacked cards, on a grey page, with generous vertical
   (`minmax(15.5rem, 1fr)`), and three-column bar rows (`6.5rem 1fr 3rem` for distributions,
   `11rem 1fr 3rem` for ranked topics, `9rem 1fr 3rem` for writing criteria).
 - **Responsive.** The existing breakpoints are `480px`, `26rem` (416px), `30rem` (480px), and
-  `40rem` (640px) — applied to the summary strip (4→2 columns), the scale options (equal-share →
-  fixed-width, horizontally scrollable), the KPI row (4→2), and the ranked/criteria rows
-  (three-column → stacked). Two of these are the same width spelled two ways.
+  `40rem` (640px) — applied to the summary strip (4→2 columns), the KPI row (4→2), and the
+  ranked/criteria rows (three-column → stacked). Two of these are the same width spelled two ways.
+  The Student Problems scale no longer has a breakpoint of its own: as five `nowrap` text pills it
+  needed one to start scrolling horizontally, and as bare circles it fits every width without one.
 
 **Known gap, recorded not fixed:** the staff shell has **no responsive rules at all**. At 375px the
 `15.5rem` sidebar consumes two-thirds of the viewport and the three-column data grids overflow. This

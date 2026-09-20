@@ -156,42 +156,97 @@ export function StudentProblemsSection({
           <section key={area.id}>
             <p className="scale-category">{t.areas[area.id] ?? area.label}</p>
 
-            {statements.map((statement) => (
-              <fieldset className="scale-row" key={statement.id}>
-                <legend className="scale-statement">
-                  {t.statements[statement.id] ?? statement.text}
-                </legend>
+            {statements.map((statement) => {
+              // Read once per row: which of the five points is filled derives from this one value.
+              const chosen = likertAnswers[statement.id];
 
-                {/* One row, deliberately: each option takes an equal share of the row's width (see
-                    .scale-options in styles.css) so the five points — including the longest label,
-                    "Strongly agree" / "موافق بشدة" — sit on a single line instead of the last one
-                    wrapping alone. */}
-                <div className="scale-options">
-                  {instrument.scale.map((point) => {
-                    const inputId = `${statement.id}-${point.value}`;
-                    const label = t.scale[point.value] ?? point.label;
+              return (
+                <fieldset className="scale-row" key={statement.id}>
+                  <legend className="scale-statement">
+                    {t.statements[statement.id] ?? statement.text}
+                  </legend>
 
-                    return (
-                      <div className="scale-option" key={point.value}>
-                        <input
-                          type="radio"
-                          id={inputId}
-                          // One group per statement: the browser enforces a single response, and a
-                          // name shared across statements would collapse them into one answer.
-                          name={statement.id}
-                          value={point.value}
-                          checked={likertAnswers[statement.id] === point.value}
-                          onChange={() => answerStatement(statement.id, point.value)}
-                        />
-                        <label htmlFor={inputId} title={label}>
-                          <span>{label}</span>
-                        </label>
-                      </div>
-                    );
-                  })}
-                </div>
-              </fieldset>
-            ))}
+                  {/*
+                    The five points as bare circles. Only the two poles are named, below.
+
+                    This replaced five full-text pills ("Strongly disagree" … "Strongly agree") that
+                    could not fit a phone: at 360px the row either overflowed its card or had to
+                    scroll sideways, and the longest labels truncated. The replacement carries the
+                    meaning on two channels that need no width at all — see `.scale-option` in
+                    styles.css for which carries what — so every option is present and legible at any
+                    width, in either language ("غير موافق بشدة" is longer than anything English here).
+
+                    `data-point` is the hook the stylesheet sizes and colours each step from, so the
+                    ramp lives in one place rather than in a per-point class name.
+                  */}
+                  <div className="scale-options">
+                    {instrument.scale.map((point) => {
+                      const inputId = `${statement.id}-${point.value}`;
+                      const label = t.scale[point.value] ?? point.label;
+
+                      return (
+                        <div className="scale-option" data-point={point.value} key={point.value}>
+                          <input
+                            type="radio"
+                            id={inputId}
+                            // One group per statement: the browser enforces a single response, and a
+                            // name shared across statements would collapse them into one answer.
+                            name={statement.id}
+                            value={point.value}
+                            checked={chosen === point.value}
+                            onChange={() => answerStatement(statement.id, point.value)}
+                          />
+                          {/*
+                            The label is the circle and the entire hit area; the text inside it is the
+                            accessible name and is visually hidden, never dropped.
+
+                            That distinction is the whole reason this markup is shaped this way. A
+                            circle has no name of its own, so if the text were removed rather than
+                            hidden, all five radios would announce as unlabelled — and the `title`
+                            attribute that used to cover truncated labels does not fire on touch,
+                            which is the device this section is built for (UX-DECISIONS P2-11).
+                          */}
+                          <label htmlFor={inputId} title={label}>
+                            <span className="sr-only">{label}</span>
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/*
+                    The two poles, named. Deliberately the *inner* labels — "Disagree" and "Agree" —
+                    not the endpoints of the scale, matching the reference this layout came from: the
+                    anchors name the direction and the circles carry the intensity between them.
+
+                    Both come from the instrument's own scale (`t.scale[2]` / `t.scale[4]`), so they
+                    translate with the rest of the section and cannot drift from the content.
+
+                    `aria-hidden`, because each radio already announces its own full label — "Strongly
+                    disagree" through "Strongly agree". These are a sighted shorthand for the poles,
+                    and a screen reader reading "Disagree Agree" as loose text after the group would
+                    be hearing a second, vaguer copy of what it was just told precisely.
+                  */}
+                  <div className="scale-anchors" aria-hidden="true">
+                    <span>{t.scale[2]}</span>
+                    <span>{t.scale[4]}</span>
+                  </div>
+
+                  {/*
+                    No "you chose X" line under the row, deliberately.
+
+                    One was built and then removed on seeing it on a real device: echoing the chosen
+                    value back at the student reads as the app commenting on their answer, and the
+                    filled circle already states it. The row shows the answer; it does not narrate it.
+
+                    This is the one place the section does not spell a value out in words, and it is
+                    safe to leave out because the answer stays recoverable two other ways — the
+                    filled point's position and size, and the radio's own accessible name, which a
+                    screen reader announces on selection and which is unaffected by this.
+                  */}
+                </fieldset>
+              );
+            })}
           </section>
         );
       })}

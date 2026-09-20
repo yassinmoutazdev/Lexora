@@ -74,7 +74,14 @@ export function ThemeToggle({ variant = 'topbar' }: { variant?: 'topbar' | 'floa
       aria-pressed={dark}
     >
       {dark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
-      Dark mode
+      {/*
+        The label is a `<span>` so the narrow-width rule in styles.css can take it out of the visual
+        layout without taking it out of the accessible name. As a bare text node it could not be
+        targeted, and hiding it with `display: none` would have left the control with no name at all.
+        In the staff topbar below 40rem the label is what stands between the page title and its own
+        line — see `.theme-toggle-label` there.
+      */}
+      <span className="theme-toggle-label">Dark mode</span>
     </button>
   );
 }

@@ -528,7 +528,7 @@ different destination on failure, which is a product decision, not a pattern); a
 | P2-8 | EN/AR switch announces the language change |
 | P2-9 | Answered/unanswered affordance per question |
 | P2-10 | Dashboard marks stale figures after a failed refetch |
-| P2-11 | Truncated Likert labels: an affordance that works on touch |
+| P2-11 | ~~Truncated Likert labels: an affordance that works on touch~~ — **done 2026-09-20**, by removing the truncation: the scale is five bare circles now. See `UX-DECISIONS.md` §2. |
 | P2-12 | Skeletons — *pulled into C2/C3/C5* |
 | D6 | Session-expiry reason shown once on the entry page |
 | C8 | `NotFound` gains "Go back" |

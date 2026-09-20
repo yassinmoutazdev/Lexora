@@ -1,0 +1,32 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "createdAt": "2026-09-20T16:20:24.108Z",
+        "reason": "project design docs: UX-DECISIONS.md motion table and the styles.css token comment record --ease-emphasis as the deliberate overshoot for the three acknowledgement moments"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "frontend/src/styles.css"
+        ],
+        "createdAt": "2026-09-20T16:22:04.154Z",
+        "reason": "project design: the only two occurrences are the LTR and RTL halves of the .original-text <blockquote> quote rule — typographic convention, drawn in the neutral --line token, not a card side-tab accent"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "frontend/src/styles.css"
+        ],
+        "createdAt": "2026-09-20T16:22:04.861Z",
+        "reason": "project design docs: the only occurrence is .compare-bar-fill's chart-bar height, listed in UX-DECISIONS.md as intended on cohort-filter change; a scaleY substitute would distort the rounded bar top and its child value label"
+      }
+    ]
+  }
+}

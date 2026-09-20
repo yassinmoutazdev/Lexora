@@ -160,6 +160,45 @@ are in scope for this pass **as baseline quality**, not as compliance: the PRD h
 family, no WCAG target, and no breakpoint requirement, and `CLAUDE.md` says there is no mobile
 target. Recorded in `PRODUCT.md` so future work does not mistake it for a specified standard.
 
+**P2-11 closed: the Likert scale is now five circles, not five labelled pills (2026-09-20).** The
+deferred item was *"a touch-friendly affordance for truncated Likert labels — the `title` attribute
+is the current mechanism and does nothing on touch."* The fix removes the truncation rather than
+adding a way to read through it: the labels are no longer displayed, so there is nothing left to
+truncate.
+
+The old row was five full-text pills held on one line by `flex: 1 1 0` and allowed to scroll
+horizontally below 26rem — on the device this section is built for it truncated its longest labels,
+scrolled sideways under the reader's thumb, and offered a `title` tooltip that never fires on touch.
+It is now five bare circles with only the two poles named ("Disagree" / "Agree"), carrying meaning on
+two channels that cost no width: **size is intensity** (largest at the poles, smallest at the neutral
+centre) and **colour is direction** (the `--sp-scale-*` ramp). Selection is a *fill* rather than a
+colour change, so it survives greyscale — colour is never the only signal.
+
+Three things this deliberately preserves, because they are what the refactor could most easily have
+broken:
+
+- **The accessible names.** The per-option text moved into a visually-hidden `<span>` inside each
+  `<label>`; it was hidden, never removed. A circle has no name of its own, and `title` is not an
+  accessible name, so deleting the text would have left all five radios announcing as unlabelled.
+  Verified in the accessibility tree: every radio still reports its full label.
+- **The data model.** Answers are still `{ statementId: 1–5 }` through the same
+  `PATCH /api/student/draft` path. The content schema pins the scale to exactly five points
+  (`contentSchemas.ts`), and the reference screenshot's seven circles were **not** copied — this was
+  a presentation change only, so no migration and no scoring change.
+- **The tap target.** The circles are small by design; the boxes around them are 44×44px, measured.
+
+**A named design rule was bent to do it, with the team's agreement.** The Reserved Hue Rule reserved
+`--ai` for Student Problems content *including its scale options*, precisely so the section could not
+be mistaken for a result. With the labels gone a single hue cannot express direction across five
+points, so the scale now uses a five-step ramp from purple to green. This was put to the user as a
+choice, with the rule and its rationale quoted, and they chose the ramp. The deviation is recorded as
+an amendment to the rule itself in `DESIGN.md` rather than left as drift between the document and the
+code, and it is kept as small as it can be: no new hues (the poles are the existing Derived Violet
+and Success values, the middle steps are midpoints through neutral grey) and the ramp is scoped as a
+component custom property rather than a palette token. Contrast for every step was measured against
+`--paper` rather than eyeballed — the neutral moved from `#9aa3ae` (2.55:1, failing the 3:1 UI
+boundary threshold) to `#7d8794` (3.64:1) for that reason alone.
+
 ---
 
 ## 3. Not done — deliberately
@@ -180,12 +219,12 @@ The behaviour those patterns would have unified **is** in place — implemented 
 rather than through a shared component. Worth doing as a follow-up with the browser available to
 verify it.
 
-Also deferred, both from the P2 list:
+Also deferred, from the P2 list:
 
 - **A per-question answered/unanswered affordance** in `ChoiceQuestions` (P2-9). Real work, not a
   tweak, and it changes how the assessment reads.
-- **A touch-friendly affordance for truncated Likert labels** (P2-11). The `title` attribute is the
-  current mechanism and does nothing on touch.
+
+(P2-11, the touch affordance for truncated Likert labels, is no longer deferred — see section 2.)
 
 ---
 

@@ -351,10 +351,19 @@ function StudentProblemsPanel({ submission }: { submission: StaffSubmissionDetai
 
       <div className="feedback-block">
         <h3>What they wrote, in their own words</h3>
+        {/*
+          `dir="auto"` on the blockquote below, because the student may have written in English or
+          in Arabic (FR-PROB-004) and only the browser can tell which by looking at it. Without it
+          the block stayed LTR and the quote bar drew on the left of Arabic text: `styles.css`'s RTL
+          rule keys on a *resolved* direction, and nothing was setting one. The same mechanism the
+          student's own textarea uses (see `StudentProblemsSection`), for the same reason.
+        */}
         {studentProblems.openTextOriginal === null ? (
           <p className="muted">No open-ended response was given.</p>
         ) : (
-          <blockquote className="original-text">{studentProblems.openTextOriginal}</blockquote>
+          <blockquote className="original-text" dir="auto">
+            {studentProblems.openTextOriginal}
+          </blockquote>
         )}
         <p className="muted">
           {describeTextStatus(studentProblems.textStatus)}
