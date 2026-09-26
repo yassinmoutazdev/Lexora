@@ -183,7 +183,7 @@ export function EntryPage() {
           })}
 
           <div className="button-row">
-            <button type="submit" disabled={submitting}>
+            <button type="submit" className="btn-bold" disabled={submitting}>
               {submitting ? 'Checking…' : 'Begin assessment'}
             </button>
           </div>

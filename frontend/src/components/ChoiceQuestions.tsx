@@ -32,38 +32,59 @@ export function ChoiceQuestions({
   namePrefix: string;
   onAnswer: (questionId: string, optionId: string) => void;
 }) {
+  const answeredCount = questions.filter((question) => answers[question.id] != null).length;
+
   return (
-    <ol className="question-list">
-      {questions.map((question, index) => (
-        <li key={question.id}>
-          <fieldset className="answer">
-            <legend className="prompt">
-              <span className="question-number">Question {index + 1}</span>
-              {question.prompt}
-            </legend>
+    <>
+      {/*
+        How many of this section's questions are answered so far, filled in the section's own
+        accent hue (set as `--section-hue` on an ancestor by `AssessmentPage`; falls back to
+        `--accent` for anything that doesn't set it — see .card-edge in styles.css).
+      */}
+      <div className="section-progress" aria-hidden="true">
+        <div className="section-progress-track">
+          <div
+            className="section-progress-fill"
+            style={{ width: `${questions.length === 0 ? 0 : (answeredCount / questions.length) * 100}%` }}
+          />
+        </div>
+        <span className="section-progress-count">
+          {answeredCount} of {questions.length}
+        </span>
+      </div>
 
-            <div className="options">
-              {(question.options ?? []).map((option) => {
-                const inputId = `${namePrefix}-${question.id}-${option.id}`;
+      <ol className="question-list">
+        {questions.map((question, index) => (
+          <li key={question.id}>
+            <fieldset className="answer">
+              <legend className="prompt">
+                <span className="question-number">Question {index + 1}</span>
+                {question.prompt}
+              </legend>
 
-                return (
-                  <div className="option" key={option.id}>
-                    <input
-                      type="radio"
-                      id={inputId}
-                      name={`${namePrefix}-${question.id}`}
-                      value={option.id}
-                      checked={answers[question.id] === option.id}
-                      onChange={() => onAnswer(question.id, option.id)}
-                    />
-                    <label htmlFor={inputId}>{option.text}</label>
-                  </div>
-                );
-              })}
-            </div>
-          </fieldset>
-        </li>
-      ))}
-    </ol>
+              <div className="options">
+                {(question.options ?? []).map((option) => {
+                  const inputId = `${namePrefix}-${question.id}-${option.id}`;
+
+                  return (
+                    <div className="option" key={option.id}>
+                      <input
+                        type="radio"
+                        id={inputId}
+                        name={`${namePrefix}-${question.id}`}
+                        value={option.id}
+                        checked={answers[question.id] === option.id}
+                        onChange={() => onAnswer(question.id, option.id)}
+                      />
+                      <label htmlFor={inputId}>{option.text}</label>
+                    </div>
+                  );
+                })}
+              </div>
+            </fieldset>
+          </li>
+        ))}
+      </ol>
+    </>
   );
 }

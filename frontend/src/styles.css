@@ -65,6 +65,9 @@
 
   --radius-sm: 6px;
   --radius-md: 10px;
+  /* Softer radius for the mobile redesign's question/passage/entry cards specifically (see
+     lexora-mobile-spec.html) — not applied to `.card` globally, which keeps --radius-md. */
+  --radius-lg: 18px;
   --radius-pill: 999px;
   --gap: 1rem;
 
@@ -624,12 +627,15 @@ button.sidebar-toggle:hover {
 .field input,
 .field textarea {
   width: 100%;
-  padding: 0.65rem 0.8rem;
+  padding: 0.75rem 0.9rem;
   font: inherit;
   color: inherit;
   background: var(--page);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  /* Softer than --radius-sm, short of the 18px card radius — mobile design pass, applies to every
+     .field input/textarea (entry form, writing response, staff forms) since one input style is
+     simpler to keep consistent than a per-screen override. */
+  border-radius: 12px;
   transition: border-color var(--motion-fast) var(--ease-standard),
     box-shadow var(--motion-fast) var(--ease-standard),
     background var(--motion-fast) var(--ease-standard);
@@ -715,6 +721,29 @@ button:hover:not(:disabled) {
 button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+/*
+  Bolder primary CTA (mobile design pass, spec panel 6) — opt-in via `.btn-bold`, not the base
+  `button` rule, so staff screens (Create cohort, Export CSV, etc.) are unaffected. Same navy
+  family as `--accent`/`--accent-strong`, no new hue: a subtle top-to-bottom gradient plus a hard
+  bottom edge for a pressed/tactile look.
+*/
+.btn-bold {
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  border: none;
+  box-shadow: 0 3px 0 var(--accent-strong);
+  font-weight: 700;
+}
+
+.btn-bold:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent-strong));
+}
+
+.btn-bold:active:not(:disabled) {
+  box-shadow: 0 1px 0 var(--accent-strong);
+  transform: translateY(2px);
 }
 
 button.secondary {
@@ -978,47 +1007,90 @@ details.detail-panel .question-list {
 
 .answer {
   border: 1px solid var(--line-soft);
-  border-radius: var(--radius-md);
-  padding: 1.1rem 1.2rem;
-  margin-bottom: 0.9rem;
+  border-radius: var(--radius-lg, 18px);
+  padding: 1.25rem 1.3rem;
+  margin-bottom: 1rem;
 }
 
+/*
+  "Question N" as a small tinted pill above the question text (mobile design pass, see
+  lexora-mobile-spec.html panel 1). Kept as a `<span>` inside the existing `legend.prompt`, so the
+  legend stays one accessible name for the fieldset rather than being duplicated as visible text.
+
+  ## Why this is floated — and it is not a layout preference
+
+  A `<legend>` is not an ordinary block. While it is neither floated nor absolutely positioned the
+  fieldset lays it out *in its own top border*: the border is drawn at the legend's vertical
+  midpoint and notched around it. That is invisible while a legend is one line tall, and it broke
+  the moment the pill pushed the question onto a second line. A two-line legend straddles the
+  border, so the pill and the question's first line were painted *above* the card and the remaining
+  lines inside it — a question that had visibly fallen out of its box. Measured at 393px: legend
+  62.61px tall, border drawn 31.3px down, straight through the middle of the text.
+
+  `float` is the opt-out the HTML rendering rules provide — a floated legend is laid out as an
+  ordinary in-flow box, so the fieldset draws a whole, unbroken rectangle and the legend sits inside
+  its padding. `width: 100%` stops it shrinking to sit beside the options, and the flex column is
+  what actually puts the pill on its own line: as an inline-block it flowed inline with the question
+  text, which is the arrangement the comment above had always claimed and never had.
+
+  `.options` clears it (below), and clearance respects the `margin-bottom` kept here.
+*/
 .answer legend.prompt {
+  float: left;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
   font-weight: 600;
   padding: 0;
-  margin-bottom: 0.8rem;
+  margin: 0 0 0.9rem;
 }
 
 .question-number {
-  display: block;
-  color: var(--ink-faint);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  margin-bottom: 0.3rem;
+  display: inline-block;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--radius-pill);
+  margin-bottom: 0.6rem;
 }
 
+/*
+  Each option is now its own padded, rounded, full-width tap target with visible space between
+  rows, replacing the previous tightly-packed radio+label list (mobile design pass). The gap is on
+  `.options` itself so the row's own border/background reads as a single shape rather than one long
+  strip with internal hairlines.
+*/
 .options {
   display: grid;
-  gap: 0.15rem;
+  gap: 0.65rem;
+  /* Dropped below the floated legend rather than flowing beside it — see `.answer legend.prompt`. */
+  clear: left;
 }
 
 .option {
   display: flex;
-  gap: 0.6rem;
+  gap: 0.7rem;
   align-items: center;
-  padding: 0.5rem 0.6rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--page);
+  border: 1.5px solid var(--line);
+  transition: border-color var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard);
 }
 
 .option:hover {
-  background: var(--accent-soft);
+  border-color: var(--accent-soft-strong);
 }
 
 .option:has(input:checked) {
   background: var(--accent-soft);
-  border-color: var(--accent-soft-strong);
+  border-color: var(--accent);
 }
 
 .option input {
@@ -1037,6 +1109,57 @@ details.detail-panel .question-list {
 .option:has(input:checked) label {
   font-weight: 600;
   color: var(--accent-strong);
+}
+
+/*
+  Per-section accent hue and progress bar (mobile design pass, spec panel 7).
+
+  `--section-hue` is set inline per section by `AssessmentPage` (grammar/vocabulary/reading each get
+  their own value; anything else falls back to `--accent`), so this file names the *mechanism* once
+  rather than one rule per section.
+*/
+.section-hue-grammar {
+  --section-hue: #3d5ea8;
+}
+.section-hue-vocabulary {
+  --section-hue: #b5760f;
+}
+.section-hue-reading {
+  --section-hue: #147a72;
+}
+
+.card-edge {
+  border-top: 4px solid var(--section-hue, var(--accent));
+  border-radius: 18px 18px var(--radius-md) var(--radius-md);
+}
+
+.section-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0 0 1.1rem;
+}
+
+.section-progress-track {
+  flex: 1;
+  height: 0.5rem;
+  background: var(--line-soft);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.section-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--section-hue, var(--accent));
+  transition: width var(--motion-base) var(--ease-standard);
+}
+
+.section-progress-count {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-faint);
+  flex: none;
 }
 
 .writing-task {
@@ -1674,10 +1797,27 @@ details.detail-panel .question-list {
   border-top: none;
 }
 
+/*
+  The statement, floated for the same reason as `.answer legend.prompt` — and here the damage was
+  worse, because this row's border is a *separator* rather than a card edge.
+
+  `.scale-row` carries `border-top` to divide one statement from the next. With the legend laid out
+  in the border, that rule was drawn at the statement's vertical midpoint: every Arabic statement
+  here is two lines at phone width, so the separator ran straight through the middle of the
+  sentence, and the row read as two half-statements with a rule between them. Measured at 393px:
+  legend 48.63px tall, border 24.31px down — the midpoint, exactly. The first row was unaffected
+  only because `.scale-row:first-of-type` has no top border, which is what made it look like a
+  per-row quirk rather than one rule applied to every row.
+
+  Floated, the legend sits inside the row's padding and the separator goes back to dividing rows.
+  `.scale-options` clears it.
+*/
 .scale-row legend.scale-statement {
+  float: left;
+  width: 100%;
   font-weight: 500;
   padding: 0;
-  margin-bottom: 0.7rem;
+  margin: 0 0 0.7rem;
   font-size: 0.95rem;
 }
 
@@ -1716,6 +1856,8 @@ details.detail-panel .question-list {
      The *bounded* width is what makes `space-between` mean "these five, adjacent", which is the
      whole reason the row does not need a label under every point. */
   max-width: var(--sp-scale-width);
+  /* Dropped below the floated statement rather than flowing beside it — see the legend rule above. */
+  clear: left;
 }
 
 .scale-option {

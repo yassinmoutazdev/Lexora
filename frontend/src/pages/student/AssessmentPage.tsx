@@ -263,7 +263,12 @@ function AssessmentWorkspace({
         </nav>
       </div>
 
-      <div className="card">
+      {/*
+        The section-hue class is only meaningful for grammar/vocabulary/reading — `card-edge`
+        falls back to `--accent` (see styles.css) for writing/studentProblems, so this stays a
+        no-op tint rather than a wrong color for those two.
+      */}
+      <div className={`card card-edge section-hue-${activeSection}`}>
         {/* A focus target for section changes, not a control — `tabIndex={-1}` keeps it out of the
             tab order while letting the effect above move focus here. */}
         <h2 ref={sectionHeading} tabIndex={-1}>
@@ -469,6 +474,7 @@ function SubmitControl({
       <div className="button-row">
         <button
           type="button"
+          className="btn-bold"
           onClick={() => void prepareSubmit()}
           disabled={!completeness.complete || phase !== 'idle'}
           aria-busy={phase === 'preparing'}
